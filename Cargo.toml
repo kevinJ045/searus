@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+  "searus_core",
+  "searus_searchers",
+  "searus_index",
+  "searus_embeddings",
+  "searus_examples",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Makano"]
+license = "MIT"
+repository = "https://github.com/makano/searus"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

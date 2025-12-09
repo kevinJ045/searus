@@ -1,0 +1,12 @@
+[package]
+name = "searus_index"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+searus_core = { path = "../searus_core" }
+serde.workspace = true
+serde_json.workspace = true

@@ -1,0 +1,14 @@
+[package]
+name = "searus_examples"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+searus_core = { path = "../searus_core" }
+searus_searchers = { path = "../searus_searchers" }
+searus_index = { path = "../searus_index" }
+serde.workspace = true
+serde_json.workspace = true

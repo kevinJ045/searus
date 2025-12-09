@@ -1,8 +1,27 @@
-//! Text tokenization utilities.
+//! Text tokenization utilities for searchers.
+//!
+//! This module provides functions for breaking down text into tokens (words)
+//! and for calculating term frequencies, which are essential steps for many
+//! text-based search algorithms.
 
 use unicode_segmentation::UnicodeSegmentation;
 
-/// Tokenize text into words.
+/// Tokenizes a given text into a vector of words.
+///
+/// This function performs the following steps:
+/// 1. It uses Unicode segmentation to correctly split the text into words,
+///    which is more robust than splitting by whitespace, especially for
+///    multilingual text.
+/// 2. It converts each word to lowercase to ensure that the tokenization is
+///    case-insensitive (e.g., "Hello" and "hello" are treated as the same token).
+///
+/// # Arguments
+///
+/// * `text` - The string slice to be tokenized.
+///
+/// # Returns
+///
+/// A `Vec<String>` containing the lowercase word tokens.
 pub fn tokenize(text: &str) -> Vec<String> {
   text
     .unicode_words()
@@ -10,7 +29,19 @@ pub fn tokenize(text: &str) -> Vec<String> {
     .collect()
 }
 
-/// Calculate term frequencies for a text.
+/// Calculates the frequency of each term in a given text.
+///
+/// This function first tokenizes the text using the `tokenize` function and
+/// then counts the occurrences of each unique token.
+///
+/// # Arguments
+///
+/// * `text` - The string slice to be analyzed.
+///
+/// # Returns
+///
+/// A `HashMap<String, usize>` where the keys are the unique tokens (terms)
+/// and the values are their frequencies (counts) in the text.
 pub fn term_frequencies(text: &str) -> std::collections::HashMap<String, usize> {
   let tokens = tokenize(text);
   let mut freqs = std::collections::HashMap::new();

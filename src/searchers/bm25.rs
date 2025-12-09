@@ -1,37 +1,57 @@
-//! BM25 scoring implementation.
+//! An implementation of the Okapi BM25 scoring algorithm.
+//!
+//! BM25 (Best Matching 25) is a ranking function used by search engines to
+//! estimate the relevance of documents to a given search query.
 
 use std::collections::HashMap;
 
-/// BM25 scorer for ranking documents.
+/// A scorer for ranking documents using the BM25 algorithm.
+///
+/// This struct holds the configuration parameters for BM25 and provides the
+/// method to calculate the score.
 #[derive(Debug, Clone)]
 pub struct BM25Scorer {
-  /// BM25 k1 parameter (term frequency saturation).
+  /// The `k1` parameter controls the term frequency saturation. A higher value
+  /// means that the score continues to increase with term frequency, while a
+  /// lower value means the score saturates more quickly. The default is 1.5.
   pub k1: f32,
-  /// BM25 b parameter (length normalization).
+  /// The `b` parameter controls the document length normalization. A value of
+  /// 0.0 means no length normalization, while a value of 1.0 means full
+  /// normalization. The default is 0.75.
   pub b: f32,
 }
 
 impl Default for BM25Scorer {
+  /// Creates a `BM25Scorer` with the default `k1` and `b` parameters.
   fn default() -> Self {
     Self { k1: 1.5, b: 0.75 }
   }
 }
 
 impl BM25Scorer {
-  /// Create a new BM25 scorer with default parameters.
+  /// Creates a new `BM25Scorer` with the default parameters.
   pub fn new() -> Self {
     Self::default()
   }
 
-  /// Calculate BM25 score for a document.
+  /// Calculates the BM25 score of a document for a given query.
+  ///
+  /// The BM25 score is a sum of the scores for each query term. The score for
+  /// each term is a product of its Inverse Document Frequency (IDF) and a
+  /// normalized term frequency (TF).
   ///
   /// # Arguments
-  /// * `query_terms` - Terms from the query
-  /// * `doc_terms` - Term frequencies in the document
-  /// * `doc_length` - Total number of terms in the document
-  /// * `avg_doc_length` - Average document length in the corpus
-  /// * `doc_freq` - Document frequency for each term (how many docs contain it)
-  /// * `total_docs` - Total number of documents in the corpus
+  ///
+  /// * `query_terms` - A slice of the terms in the search query.
+  /// * `doc_terms` - A map of term frequencies for the document being scored.
+  /// * `doc_length` - The total number of terms in the document.
+  /// * `avg_doc_length` - The average document length across the entire corpus.
+  /// * `doc_freq` - A map of document frequencies for each term in the corpus.
+  /// * `total_docs` - The total number of documents in the corpus.
+  ///
+  /// # Returns
+  ///
+  /// The calculated BM25 score as an `f32`.
   pub fn score(
     &self,
     query_terms: &[String],
@@ -52,6 +72,7 @@ impl BM25Scorer {
       let df = *doc_freq.get(term).unwrap_or(&1) as f32;
       let idf = self.idf(df, total_docs);
 
+      // Calculate the normalized term frequency component.
       let norm_tf = (tf * (self.k1 + 1.0))
         / (tf + self.k1 * (1.0 - self.b + self.b * (doc_length as f32 / avg_doc_length)));
 
@@ -61,9 +82,13 @@ impl BM25Scorer {
     score
   }
 
-  /// Calculate inverse document frequency.
+  /// Calculates the Inverse Document Frequency (IDF) for a term.
+  ///
+  /// IDF is a measure of how much information a word provides, i.e., whether
+  /// it's common or rare across all documents.
   fn idf(&self, doc_freq: f32, total_docs: usize) -> f32 {
     let n = total_docs as f32;
+    // This is a common variant of the IDF formula.
     ((n - doc_freq + 0.5) / (doc_freq + 0.5) + 1.0).ln()
   }
 }

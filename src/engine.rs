@@ -5,18 +5,42 @@ use crate::types::{Query, SearcherKind, SearusMatch};
 use std::collections::HashMap;
 
 /// The main search engine that coordinates multiple searchers.
+///
+/// `SearusEngine` is the central component of the library. It manages a collection
+/// of `Searcher` plugins, dispatches search queries to them, and then merges
+/// the results into a single, ranked list.
 pub struct SearusEngine<T> {
+  /// The collection of registered searcher plugins.
   searchers: Vec<Box<dyn Searcher<T>>>,
+  /// The method used to normalize scores from different searchers.
   normalization: NormalizationMethod,
 }
 
 impl<T> SearusEngine<T> {
-  /// Create a new engine builder.
+  /// Creates a new `SearusEngineBuilder` to construct an engine.
   pub fn builder() -> SearusEngineBuilder<T> {
     SearusEngineBuilder::new()
   }
 
-  /// Search using all registered searchers and merge results.
+  /// Searches for items using all registered searchers and merges the results.
+  ///
+  /// The search process involves the following steps:
+  /// 1. The query is dispatched to each registered `Searcher`.
+  /// 2. The raw scores from each searcher are normalized to a common scale
+  ///    (e.g., 0.0 to 1.0) using the configured `NormalizationMethod`.
+  /// 3. The normalized results are merged. If multiple searchers match the same
+  ///    item, their scores are combined using a weighted sum.
+  /// 4. The final, merged list is sorted by score in descending order.
+  /// 5. Pagination (`skip` and `limit`) is applied to the final list.
+  ///
+  /// # Arguments
+  ///
+  /// * `items` - A slice of items to be searched.
+  /// * `query` - The search query containing the search parameters.
+  ///
+  /// # Returns
+  ///
+  /// A `Vec<SearusMatch<T>>` containing the final, ranked search results.
   pub fn search(&self, items: &[T], query: &Query) -> Vec<SearusMatch<T>>
   where
     T: Clone,
@@ -26,14 +50,12 @@ impl<T> SearusEngine<T> {
     }
 
     // Collect results from all searchers
-    let mut all_results: Vec<(SearcherKind, Vec<SearusMatch<T>>)> = Vec::new();
-
-    for searcher in &self.searchers {
-      let results = searcher.search(query, items);
-      if !results.is_empty() {
-        all_results.push((searcher.kind(), results));
-      }
-    }
+    let all_results: Vec<(SearcherKind, Vec<SearusMatch<T>>)> = self
+      .searchers
+      .iter()
+      .map(|searcher| (searcher.kind(), searcher.search(query, items)))
+      .filter(|(_, results)| !results.is_empty())
+      .collect();
 
     if all_results.is_empty() {
       return Vec::new();
@@ -52,14 +74,15 @@ impl<T> SearusEngine<T> {
     merged.into_iter().skip(skip).take(limit).collect()
   }
 
-  /// Normalize scores from each searcher.
+  /// Normalizes the scores from each searcher to a common scale.
+  ///
+  /// This is a private helper method that ensures that scores from different
+  /// searchers (which may have vastly different scales) can be meaningfully
+  /// combined.
   fn normalize_results(
     &self,
     results: Vec<(SearcherKind, Vec<SearusMatch<T>>)>,
-  ) -> Vec<(SearcherKind, Vec<SearusMatch<T>>)>
-  where
-    T: Clone,
-  {
+  ) -> Vec<(SearcherKind, Vec<SearusMatch<T>>)> {
     results
       .into_iter()
       .map(|(kind, mut matches)| {
@@ -81,14 +104,14 @@ impl<T> SearusEngine<T> {
                 m.score = (m.score - min_score) / range;
               }
             } else {
-              // All scores are the same
+              // All scores are the same, so we can set them all to 1.0
               for m in &mut matches {
                 m.score = 1.0;
               }
             }
           }
           NormalizationMethod::InverseDistance => {
-            // Assume scores are distances, convert to similarities
+            // Assumes scores are distances; converts them to similarities.
             for m in &mut matches {
               m.score = 1.0 / (1.0 + m.score);
             }
@@ -100,7 +123,18 @@ impl<T> SearusEngine<T> {
       .collect()
   }
 
-  /// Merge results from multiple searchers using weighted scoring.
+  /// Merges results from multiple searchers using a weighted scoring model.
+  ///
+  /// This method groups matches by item and combines their scores.
+  ///
+  /// # Warning on Merging Logic
+  ///
+  /// The current implementation uses a placeholder `hash_item` function to
+  /// identify unique items. This function is not robust and may not correctly
+  /// merge results for the same item if the item type `T` does not have a
+  /// stable identity (e.g., if it's cloned). For production use, it is
+  /// highly recommended that the items being searched have a proper, unique
+  /// identifier.
   fn merge_results(
     &self,
     results: Vec<(SearcherKind, Vec<SearusMatch<T>>)>,
@@ -109,17 +143,13 @@ impl<T> SearusEngine<T> {
   where
     T: Clone,
   {
-    // Group matches by item (using index as identifier)
-    // This is a simplified version - in production we'd use proper entity IDs
     let mut merged: HashMap<usize, SearusMatch<T>> = HashMap::new();
-    // let mut item_to_index: HashMap<usize, usize> = HashMap::new();
 
     for (kind, matches) in results {
       let weight = query.options.weights.get(&kind).copied().unwrap_or(1.0);
 
       for m in matches {
-        // Find or create entry for this item
-        // In a real implementation, we'd use proper entity IDs
+        // Use a placeholder hash to identify the item.
         let item_hash = self.hash_item(&m.item);
 
         let entry = merged.entry(item_hash).or_insert_with(|| SearusMatch {
@@ -129,20 +159,20 @@ impl<T> SearusEngine<T> {
           details: Vec::new(),
         });
 
-        // Add weighted score
+        // Add the weighted score to the total.
         entry.score += m.score * weight;
 
-        // Merge field scores
+        // Merge field scores.
         for (field, score) in m.field_scores {
           *entry.field_scores.entry(field).or_insert(0.0) += score * weight;
         }
 
-        // Merge details
+        // Merge details from all searchers.
         entry.details.extend(m.details);
       }
     }
 
-    // Convert to vec and sort by score (descending)
+    // Convert the map of merged items to a Vec and sort by score.
     let mut results: Vec<SearusMatch<T>> = merged.into_values().collect();
     results.sort_by(|a, b| {
       b.score
@@ -153,16 +183,28 @@ impl<T> SearusEngine<T> {
     results
   }
 
-  /// Simple hash function for items (placeholder - in production use proper IDs).
-  fn hash_item(&self, _item: &T) -> usize {
-    // This is a placeholder. In production, items should have proper IDs.
-    // For now, we'll use memory address as a simple identifier.
-    // This works for the basic case but isn't ideal.
-    0
+  /// A placeholder hash function for identifying items.
+  ///
+  /// # Warning
+  ///
+  /// This function is a placeholder and should not be used in production.
+  /// It uses the memory address of the item as a hash, which is not a
+  /// stable identifier, especially since items are cloned during the search
+  /// process. This means that matches for the same logical item from
+  /// different searchers may not be correctly merged.
+  ///
+  /// For reliable merging, your item type `T` should have a proper, unique
+  /// identifier that can be used for hashing and equality checks.
+  fn hash_item(&self, item: &T) -> usize {
+    // Using the memory address as a hash is a temporary, unstable solution.
+    item as *const T as usize
   }
 }
 
-/// Builder for the search engine.
+/// A builder for creating `SearusEngine` instances.
+///
+/// The builder pattern provides a convenient way to configure and construct
+/// a `SearusEngine` with the desired searchers and normalization method.
 #[derive(Default)]
 pub struct SearusEngineBuilder<T> {
   searchers: Vec<Box<dyn Searcher<T>>>,
@@ -170,7 +212,7 @@ pub struct SearusEngineBuilder<T> {
 }
 
 impl<T> SearusEngineBuilder<T> {
-  /// Create a new engine builder.
+  /// Creates a new, empty `SearusEngineBuilder`.
   pub fn new() -> Self {
     Self {
       searchers: Vec::new(),
@@ -178,19 +220,25 @@ impl<T> SearusEngineBuilder<T> {
     }
   }
 
-  /// Add a searcher to the engine.
+  /// Adds a searcher plugin to the engine.
+  ///
+  /// Searchers are added as boxed traits to allow for different underlying
+  /// implementations.
   pub fn with(mut self, searcher: Box<dyn Searcher<T>>) -> Self {
+    // pub fn with(mut self, searcher: impl Searcher<T> + 'static) -> Self {
     self.searchers.push(searcher);
     self
   }
 
-  /// Set the normalization method.
+  /// Sets the score normalization method for the engine.
+  ///
+  /// If not set, `NormalizationMethod::MinMax` is used by default.
   pub fn normalization(mut self, method: NormalizationMethod) -> Self {
     self.normalization = Some(method);
     self
   }
 
-  /// Build the engine.
+  /// Builds the `SearusEngine` with the configured components.
   pub fn build(self) -> SearusEngine<T> {
     SearusEngine {
       searchers: self.searchers,
@@ -199,11 +247,14 @@ impl<T> SearusEngineBuilder<T> {
   }
 }
 
-/// Score normalization methods.
+/// Defines the methods for normalizing scores from different searchers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NormalizationMethod {
-  /// Min-Max normalization: (score - min) / (max - min)
+  /// Min-Max normalization, which scales scores to a [0, 1] range.
+  /// The formula is: `(score - min) / (max - min)`.
   MinMax,
-  /// Inverse distance: 1 / (1 + distance)
+  /// Inverse distance normalization, used when scores represent distances
+  /// (where lower is better). It converts distances to similarities.
+  /// The formula is: `1 / (1 + distance)`.
   InverseDistance,
 }

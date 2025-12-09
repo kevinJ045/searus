@@ -1,11 +1,11 @@
 [package]
 name = "searus"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["Makano"]
 license = "MIT"
-repository = "https://github.com/makano/searus"
-description = "A flexible, multi-modal search engine library"
+repository = "https://github.com/kevinj045/searus"
+description = "A simple extension-based search engine library"
 keywords = ["search", "semantic", "fuzzy", "vector", "bm25"]
 categories = ["algorithms", "data-structures"]
 

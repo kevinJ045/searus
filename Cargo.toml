@@ -1,20 +1,24 @@
-[workspace]
-resolver = "2"
-members = [
-  "searus_core",
-  "searus_searchers",
-  "searus_index",
-  "searus_embeddings",
-  "searus_examples",
-]
-
-[workspace.package]
+[package]
+name = "searus"
 version = "0.1.0"
 edition = "2021"
 authors = ["Makano"]
 license = "MIT"
 repository = "https://github.com/makano/searus"
+description = "A flexible, multi-modal search engine library"
+keywords = ["search", "semantic", "fuzzy", "vector", "bm25"]
+categories = ["algorithms", "data-structures"]
 
-[workspace.dependencies]
+[dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+unicode-segmentation = "1.10"
+strsim = "0.11"
+
+[[example]]
+name = "basic_semantic"
+path = "examples/basic_semantic.rs"
+
+[[example]]
+name = "multi_searcher"
+path = "examples/multi_searcher.rs"

@@ -1,6 +1,6 @@
 //! Tagged search implementation.
 
-use searus_core::prelude::*;
+use crate::prelude::*;
 use serde_json::Value;
 
 /// Tag-based searcher.

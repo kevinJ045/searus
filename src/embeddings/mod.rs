@@ -1,6 +1,6 @@
 //! Embedding provider abstractions for Searus.
 //! 
-//! This crate provides traits and implementations for generating embeddings
+//! This module provides traits and implementations for generating embeddings
 //! from text and images. Embeddings are used for vector-based search.
 
 /// Trait for text embedding providers.

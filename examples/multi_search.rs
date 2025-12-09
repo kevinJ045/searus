@@ -1,13 +1,15 @@
 //! Multi-searcher example combining semantic, tag, and fuzzy search.
 
-use searus_core::prelude::*;
-use searus_searchers::{SemanticSearch, TaggedSearch, FuzzySearch};
-use searus_examples::{sample_posts, Post};
+use searus::prelude::*;
+use searus::searchers::{FuzzySearch, SemanticSearch, TaggedSearch};
+
+#[path = "common/mod.rs"]
+mod common;
 
 fn main() {
     println!("=== Searus Multi-Searcher Example ===\n");
 
-    let posts = sample_posts();
+    let posts = common::sample_posts();
     println!("Indexed {} blog posts\n", posts.len());
 
     // Configure semantic rules
@@ -19,8 +21,8 @@ fn main() {
     // Create searchers
     let semantic_searcher = SemanticSearch::new(semantic_rules);
     let tag_searcher = TaggedSearch::new();
-    let fuzzy_searcher = FuzzySearch::new(vec!["title".to_string(), "content".to_string()])
-        .with_threshold(0.75);
+    let fuzzy_searcher =
+        FuzzySearch::new(vec!["title".to_string(), "content".to_string()]).with_threshold(0.75);
 
     // Build engine with multiple searchers and custom weights
     let engine = SearusEngine::builder()
@@ -39,16 +41,25 @@ fn main() {
             SearchOptions::default()
                 .limit(5)
                 .weight(SearcherKind::Semantic, 0.6)
-                .weight(SearcherKind::Tags, 0.4)
+                .weight(SearcherKind::Tags, 0.4),
         )
         .build();
 
     let results = engine.search(&posts, &query);
 
     for (i, result) in results.iter().enumerate() {
-        println!("{}. {} (score: {:.3})", i + 1, result.item.title, result.score);
-        println!("   Author: {} | Tags: {}", result.item.author, result.item.tags.join(", "));
-        
+        println!(
+            "{}. {} (score: {:.3})",
+            i + 1,
+            result.item.title,
+            result.score
+        );
+        println!(
+            "   Author: {} | Tags: {}",
+            result.item.author,
+            result.item.tags.join(", ")
+        );
+
         // Show which searchers contributed
         for detail in &result.details {
             match detail {
@@ -58,8 +69,15 @@ fn main() {
                 SearchDetail::Tag { matched_tags, .. } => {
                     println!("   ✓ Tags: matched {}", matched_tags.join(", "));
                 }
-                SearchDetail::Fuzzy { matched_term, original_term, similarity } => {
-                    println!("   ✓ Fuzzy: {} → {} (similarity: {:.2})", original_term, matched_term, similarity);
+                SearchDetail::Fuzzy {
+                    matched_term,
+                    original_term,
+                    similarity,
+                } => {
+                    println!(
+                        "   ✓ Fuzzy: {} → {} (similarity: {:.2})",
+                        original_term, matched_term, similarity
+                    );
                 }
                 _ => {}
             }

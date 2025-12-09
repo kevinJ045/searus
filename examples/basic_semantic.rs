@@ -1,14 +1,16 @@
 //! Basic semantic search example.
 
-use searus_core::prelude::*;
-use searus_searchers::SemanticSearch;
-use searus_examples::{sample_posts, Post};
+use searus::prelude::*;
+use searus::searchers::SemanticSearch;
+
+#[path = "common/mod.rs"]
+mod common;
 
 fn main() {
     println!("=== Searus Semantic Search Example ===\n");
 
     // Create sample blog posts
-    let posts = sample_posts();
+    let posts = common::sample_posts();
     println!("Indexed {} blog posts\n", posts.len());
 
     // Configure semantic rules
@@ -48,9 +50,14 @@ fn main() {
             println!("  No results found.\n");
         } else {
             for (i, result) in results.iter().enumerate() {
-                println!("  {}. {} (score: {:.3})", i + 1, result.item.title, result.score);
+                println!(
+                    "  {}. {} (score: {:.3})",
+                    i + 1,
+                    result.item.title,
+                    result.score
+                );
                 println!("     Author: {}", result.item.author);
-                
+
                 if !result.field_scores.is_empty() {
                     print!("     Field scores: ");
                     for (field, score) in &result.field_scores {
@@ -58,7 +65,7 @@ fn main() {
                     }
                     println!();
                 }
-                
+
                 if !result.details.is_empty() {
                     for detail in &result.details {
                         match detail {

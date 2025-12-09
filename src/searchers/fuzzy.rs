@@ -1,7 +1,7 @@
 //! Fuzzy search implementation using edit distance.
 
-use searus_core::prelude::*;
-use crate::tokenizer::tokenize;
+use crate::prelude::*;
+use crate::searchers::tokenizer::tokenize;
 use serde_json::Value;
 use strsim::jaro_winkler;
 

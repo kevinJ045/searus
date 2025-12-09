@@ -1,7 +1,7 @@
 //! In-memory index implementation.
 
-use crate::adapter::IndexAdapter;
-use searus_core::types::EntityId;
+use crate::index::adapter::IndexAdapter;
+use crate::types::EntityId;
 use std::collections::HashMap;
 
 /// In-memory index using HashMaps.

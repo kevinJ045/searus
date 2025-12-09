@@ -39,45 +39,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 
 [[package]]
-name = "searus_core"
+name = "searus"
 version = "0.1.0"
 dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "searus_embeddings"
-version = "0.1.0"
-dependencies = [
- "searus_core",
-]
-
-[[package]]
-name = "searus_examples"
-version = "0.1.0"
-dependencies = [
- "searus_core",
- "searus_index",
- "searus_searchers",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "searus_index"
-version = "0.1.0"
-dependencies = [
- "searus_core",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "searus_searchers"
-version = "0.1.0"
-dependencies = [
- "searus_core",
  "serde",
  "serde_json",
  "strsim",

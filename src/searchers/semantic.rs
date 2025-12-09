@@ -1,8 +1,8 @@
 //! Semantic text search implementation.
 
-use searus_core::prelude::*;
-use crate::tokenizer::{tokenize, term_frequencies};
-use crate::bm25::BM25Scorer;
+use crate::prelude::*;
+use crate::searchers::tokenizer::{tokenize, term_frequencies};
+use crate::searchers::bm25::BM25Scorer;
 use serde_json::Value;
 use std::collections::HashMap;
 

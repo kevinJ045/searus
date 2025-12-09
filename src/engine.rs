@@ -112,7 +112,7 @@ impl<T: Default> SearusEngine<T> {
         // Group matches by item (using index as identifier)
         // This is a simplified version - in production we'd use proper entity IDs
         let mut merged: HashMap<usize, SearusMatch<T>> = HashMap::new();
-        let mut item_to_index: HashMap<usize, usize> = HashMap::new();
+        // let mut item_to_index: HashMap<usize, usize> = HashMap::new();
 
         for (kind, matches) in results {
             let weight = query.options.weights.get(&kind).copied().unwrap_or(1.0);

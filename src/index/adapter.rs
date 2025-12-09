@@ -1,6 +1,6 @@
 //! Index adapter trait for pluggable storage backends.
 
-use searus_core::types::EntityId;
+use crate::types::EntityId;
 
 /// Trait for index storage backends.
 pub trait IndexAdapter<T>: Send + Sync {

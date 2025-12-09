@@ -94,7 +94,7 @@ where
 
     let mut results = Vec::new();
 
-    for item in items {
+    for (index, item) in items.iter().enumerate() {
       let mut max_similarity = 0.0;
       let mut best_match = None;
 
@@ -119,7 +119,7 @@ where
 
       // If a match was found above the threshold, create a SearusMatch.
       if let Some((original, matched)) = best_match {
-        let mut m = SearusMatch::new(item.clone(), max_similarity as f32);
+        let mut m = SearusMatch::new(item.clone(), max_similarity as f32, index);
         m.details.push(SearchDetail::Fuzzy {
           matched_term: matched,
           original_term: original,

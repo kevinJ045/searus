@@ -150,9 +150,10 @@ impl<T> SearusEngine<T> {
 
       for m in matches {
         // Use a placeholder hash to identify the item.
-        let item_hash = self.hash_item(&m.item);
+        let item_hash = m.id;
 
         let entry = merged.entry(item_hash).or_insert_with(|| SearusMatch {
+          id: 0 as usize,
           item: m.item.clone(),
           score: 0.0,
           field_scores: HashMap::new(),
@@ -181,23 +182,6 @@ impl<T> SearusEngine<T> {
     });
 
     results
-  }
-
-  /// A placeholder hash function for identifying items.
-  ///
-  /// # Warning
-  ///
-  /// This function is a placeholder and should not be used in production.
-  /// It uses the memory address of the item as a hash, which is not a
-  /// stable identifier, especially since items are cloned during the search
-  /// process. This means that matches for the same logical item from
-  /// different searchers may not be correctly merged.
-  ///
-  /// For reliable merging, your item type `T` should have a proper, unique
-  /// identifier that can be used for hashing and equality checks.
-  fn hash_item(&self, item: &T) -> usize {
-    // Using the memory address as a hash is a temporary, unstable solution.
-    item as *const T as usize
   }
 }
 

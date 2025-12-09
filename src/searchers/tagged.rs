@@ -95,7 +95,7 @@ where
 
     let mut results = Vec::new();
 
-    for item in items {
+    for (index, item) in items.iter().enumerate() {
       let item_tags = Self::extract_tags(item, &self.tag_field);
       if item_tags.is_empty() {
         continue;
@@ -114,7 +114,7 @@ where
         // The score is the proportion of matched query tags.
         let score = matched_tags.len() as f32 / query_tags.len() as f32;
 
-        let mut m = SearusMatch::new(item.clone(), score);
+        let mut m = SearusMatch::new(item.clone(), score, index);
         m.details.push(SearchDetail::Tag {
           matched_tags,
           total_tags: item_tags.len(),

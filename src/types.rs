@@ -33,6 +33,8 @@ pub struct SearusMatch<T> {
   /// produced this match.
   #[serde(skip_serializing_if = "Vec::is_empty")]
   pub details: Vec<SearchDetail>,
+
+  pub id: usize,
 }
 
 impl<T> SearusMatch<T> {
@@ -40,8 +42,9 @@ impl<T> SearusMatch<T> {
   ///
   /// This is a convenience method for creating a `SearusMatch` with default
   /// empty values for `field_scores` and `details`.
-  pub fn new(item: T, score: f32) -> Self {
+  pub fn new(item: T, score: f32, id: usize) -> Self {
     Self {
+      id,
       item,
       score,
       field_scores: HashMap::new(),

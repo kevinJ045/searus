@@ -1,5 +1,4 @@
 //! Basic semantic search example.
-
 use searus::prelude::*;
 use searus::searchers::SemanticSearch;
 
@@ -49,6 +48,7 @@ fn main() {
     if results.is_empty() {
       println!("  No results found.\n");
     } else {
+      println!("Found {} posts\n", results.len());
       for (i, result) in results.iter().enumerate() {
         println!(
           "  {}. {} (score: {:.3})",

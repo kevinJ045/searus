@@ -38,6 +38,95 @@ pub enum FilterExpr {
   Not(Box<FilterExpr>),
 }
 
+impl FilterExpr {
+  /// Evaluates the filter expression against a given item.
+  ///
+  /// The item must implement `serde::Serialize` so that its fields can be
+  /// accessed dynamically.
+  pub fn evaluate<T: serde::Serialize>(&self, item: &T) -> bool {
+    let json_value = match serde_json::to_value(item) {
+      Ok(v) => v,
+      Err(_) => return false,
+    };
+
+    self.evaluate_value(&json_value)
+  }
+
+  fn evaluate_value(&self, item: &serde_json::Value) -> bool {
+    match self {
+      FilterExpr::Compare { field, op, value } => {
+        let field_value = get_field_value(item, field);
+        compare_values(field_value, op, value)
+      }
+      FilterExpr::And(exprs) => exprs.iter().all(|e| e.evaluate_value(item)),
+      FilterExpr::Or(exprs) => exprs.iter().any(|e| e.evaluate_value(item)),
+      FilterExpr::Not(expr) => !expr.evaluate_value(item),
+    }
+  }
+}
+
+/// Helper function to get a value from a nested JSON object using dot notation.
+fn get_field_value<'a>(item: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+  let mut current = item;
+  for part in path.split('.') {
+    current = current.get(part)?;
+  }
+  Some(current)
+}
+
+/// Helper function to compare a JSON value from the item against a filter value.
+fn compare_values(
+  field_value: Option<&serde_json::Value>,
+  op: &CompareOp,
+  target_value: &FilterValue,
+) -> bool {
+  let field_value = match field_value {
+    Some(v) => v,
+    None => return false,
+  };
+
+  match (field_value, target_value) {
+    (serde_json::Value::String(s), FilterValue::String(t)) if *op == CompareOp::Contains => {
+      s.contains(t)
+    }
+    (serde_json::Value::String(s), FilterValue::String(t)) => compare_ord(s, op, t),
+    (serde_json::Value::Number(n), FilterValue::Number(t)) => {
+      if let Some(f) = n.as_f64() {
+        compare_ord(&f, op, t)
+      } else {
+        false
+      }
+    }
+    (serde_json::Value::Bool(b), FilterValue::Bool(t)) => match op {
+      CompareOp::Eq => b == t,
+      CompareOp::Ne => b != t,
+      _ => false,
+    },
+    (serde_json::Value::Array(arr), target) => match op {
+      CompareOp::Contains => arr.iter().any(|elem| match (elem, target) {
+        (serde_json::Value::String(s), FilterValue::String(t)) => s == t,
+        (serde_json::Value::Number(n), FilterValue::Number(t)) => n.as_f64() == Some(*t),
+        (serde_json::Value::Bool(b), FilterValue::Bool(t)) => b == t,
+        _ => false,
+      }),
+      _ => false,
+    },
+    _ => false,
+  }
+}
+
+fn compare_ord<T: PartialOrd>(a: &T, op: &CompareOp, b: &T) -> bool {
+  match op {
+    CompareOp::Eq => a == b,
+    CompareOp::Ne => a != b,
+    CompareOp::Lt => a < b,
+    CompareOp::Le => a <= b,
+    CompareOp::Gt => a > b,
+    CompareOp::Ge => a >= b,
+    CompareOp::Contains => false,
+  }
+}
+
 /// The set of comparison operators available for filter expressions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CompareOp {

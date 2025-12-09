@@ -3,38 +3,38 @@ use serde::{Deserialize, Serialize};
 /// A blog post for demonstration.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Post {
-    pub id: String,
-    pub title: String,
-    pub content: String,
-    pub author: String,
-    pub tags: Vec<String>,
-    pub views: u32,
+  pub id: String,
+  pub title: String,
+  pub content: String,
+  pub author: String,
+  pub tags: Vec<String>,
+  pub views: u32,
 }
 
 impl Post {
-    /// Create a new post.
-    pub fn new(
-        id: impl Into<String>,
-        title: impl Into<String>,
-        content: impl Into<String>,
-        author: impl Into<String>,
-        tags: Vec<String>,
-        views: u32,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            title: title.into(),
-            content: content.into(),
-            author: author.into(),
-            tags,
-            views,
-        }
+  /// Create a new post.
+  pub fn new(
+    id: impl Into<String>,
+    title: impl Into<String>,
+    content: impl Into<String>,
+    author: impl Into<String>,
+    tags: Vec<String>,
+    views: u32,
+  ) -> Self {
+    Self {
+      id: id.into(),
+      title: title.into(),
+      content: content.into(),
+      author: author.into(),
+      tags,
+      views,
     }
+  }
 }
 
 /// Create sample blog posts for examples.
 pub fn sample_posts() -> Vec<Post> {
-    vec![
+  vec![
         Post::new(
             "1",
             "Getting Started with Rust",

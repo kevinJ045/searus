@@ -46,15 +46,18 @@ fn main() {
 
   // Create semantic searcher
   let semantic_searcher = SemanticSearch::new(rules);
+  let tag_searcher = TaggedSearch::new();
 
   // Build search engine
   let engine = SearusEngine::builder()
     .with(Box::new(semantic_searcher))
+    .with(Box::new(tag_searcher))
     .build();
 
   let query = Query::builder()
     .text("search")
     .options(SearchOptions::default().limit(5))
+    .tags(vec!["ml".to_string()])
     .build();
 
   let results = engine.search(&posts, &query);

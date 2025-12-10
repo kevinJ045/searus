@@ -107,18 +107,31 @@ where
     }
 
     #[cfg(feature = "parallel")]
-    let mut results: Vec<SearusMatch<T>> = items
-      .par_iter()
-      .enumerate()
-      .filter_map(|(index, item)| self.match_entity(item, index, query, query_tags))
-      .collect();
+    let mut results: Vec<SearusMatch<T>> = {
+      // OPTIMIZATION: Pre-allocate result vector
+      let matches: Vec<_> = items
+        .par_iter()
+        .enumerate()
+        .filter_map(|(index, item)| self.match_entity(item, index, query, query_tags))
+        .collect();
+      
+      let mut results = Vec::with_capacity(matches.len());
+      results.extend(matches);
+      results
+    };
 
     #[cfg(not(feature = "parallel"))]
-    let mut results: Vec<SearusMatch<T>> = items
-      .iter()
-      .enumerate()
-      .filter_map(|(index, item)| self.match_entity(item, index, query, query_tags))
-      .collect();
+    let mut results: Vec<SearusMatch<T>> = {
+      // OPTIMIZATION: Pre-allocate with estimated capacity
+      let mut results = Vec::with_capacity(items.len() / 5); // Assume ~20% tag match rate
+      results.extend(
+        items
+          .iter()
+          .enumerate()
+          .filter_map(|(index, item)| self.match_entity(item, index, query, query_tags))
+      );
+      results
+    };
 
     // Sort results by score in descending order.
     self.sort_results(&mut results);
@@ -144,11 +157,22 @@ impl TaggedSearch {
       return None;
     }
 
-    // Find all tags that match between the query and the item.
-    let mut matched_tags = Vec::new();
+    // OPTIMIZATION: Pre-allocate with expected capacity
+    let mut matched_tags = Vec::with_capacity(query_tags.len().min(item_tags.len()));
+    
     for query_tag in query_tags {
       if item_tags.iter().any(|t| t.eq_ignore_ascii_case(query_tag)) {
         matched_tags.push(query_tag.clone());
+        
+        // OPTIMIZATION: Early return if all query tags matched
+        if matched_tags.len() == query_tags.len() {
+          let mut m = SearusMatch::new(item.clone(), 1.0, index);
+          m.details.push(SearchDetail::Tag {
+            matched_tags,
+            total_tags: item_tags.len(),
+          });
+          return Some(m);
+        }
       }
     }
 

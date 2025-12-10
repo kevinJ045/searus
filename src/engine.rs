@@ -4,6 +4,9 @@ use crate::searcher::Searcher;
 use crate::types::{Query, Searchable, SearcherKind, SearusMatch};
 use std::collections::HashMap;
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 /// The main search engine that coordinates multiple searchers.
 ///
 /// `SearusEngine` is the central component of the library. It manages a collection
@@ -50,6 +53,16 @@ impl<T: Searchable> SearusEngine<T> {
     }
 
     // Collect results from all searchers
+    // OPTIMIZATION: Run all searchers in parallel when parallel feature is enabled
+    #[cfg(feature = "parallel")]
+    let all_results: Vec<(SearcherKind, Vec<SearusMatch<T>>)> = self
+      .searchers
+      .par_iter()
+      .map(|searcher| (searcher.kind(), searcher.search(query, items)))
+      .filter(|(_, results)| !results.is_empty())
+      .collect();
+
+    #[cfg(not(feature = "parallel"))]
     let all_results: Vec<(SearcherKind, Vec<SearusMatch<T>>)> = self
       .searchers
       .iter()
@@ -83,7 +96,49 @@ impl<T: Searchable> SearusEngine<T> {
     &self,
     results: Vec<(SearcherKind, Vec<SearusMatch<T>>)>,
   ) -> Vec<(SearcherKind, Vec<SearusMatch<T>>)> {
-    results
+    // OPTIMIZATION: Normalize each searcher's results in parallel
+    #[cfg(feature = "parallel")]
+    let normalized = results
+      .into_par_iter()
+      .map(|(kind, mut matches)| {
+        if matches.is_empty() {
+          return (kind, matches);
+        }
+
+        // Find min and max scores
+        let scores: Vec<f32> = matches.iter().map(|m| m.score).collect();
+        let min_score = scores.iter().copied().fold(f32::INFINITY, f32::min);
+        let max_score = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+
+        // Normalize based on method
+        match self.normalization {
+          NormalizationMethod::MinMax => {
+            let range = max_score - min_score;
+            if range > 0.0 {
+              for m in &mut matches {
+                m.score = (m.score - min_score) / range;
+              }
+            } else {
+              // All scores are the same, so we can set them all to 1.0
+              for m in &mut matches {
+                m.score = 1.0;
+              }
+            }
+          }
+          NormalizationMethod::InverseDistance => {
+            // Assumes scores are distances; converts them to similarities.
+            for m in &mut matches {
+              m.score = 1.0 / (1.0 + m.score);
+            }
+          }
+        }
+
+        (kind, matches)
+      })
+      .collect();
+
+    #[cfg(not(feature = "parallel"))]
+    let normalized = results
       .into_iter()
       .map(|(kind, mut matches)| {
         if matches.is_empty() {
@@ -120,7 +175,9 @@ impl<T: Searchable> SearusEngine<T> {
 
         (kind, matches)
       })
-      .collect()
+      .collect();
+
+    normalized
   }
 
   /// Merges results from multiple searchers using a weighted scoring model.

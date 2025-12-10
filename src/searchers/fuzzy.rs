@@ -90,21 +90,43 @@ impl FuzzySearch {
     T: FuzzySearchable,
   {
     let mut max_similarity = 0.0;
-    let mut best_match = None;
+    let mut best_query_term = String::new();
+    let mut best_doc_term = String::new();
 
     // Check each configured field for a fuzzy match.
-    for field_name in &self.fields {
+    'outer: for field_name in &self.fields {
       if let Some(text) = Self::extract_field(item, field_name) {
         let doc_terms = tokenize(&text);
 
         // Find the best fuzzy match between query terms and document terms.
         for query_term in query_terms {
+          let query_len = query_term.len();
+          
           for doc_term in &doc_terms {
+            // OPTIMIZATION: Length-based pruning
+            // Skip if length difference is too large (>50% different)
+            let doc_len = doc_term.len();
+            let len_diff = if query_len > doc_len {
+              query_len - doc_len
+            } else {
+              doc_len - query_len
+            };
+            let max_len = query_len.max(doc_len);
+            if max_len > 0 && (len_diff * 2) > max_len {
+              continue;
+            }
+
             let similarity = jaro_winkler(query_term, doc_term);
 
             if similarity > max_similarity && similarity >= self.threshold {
               max_similarity = similarity;
-              best_match = Some((query_term.clone(), doc_term.clone()));
+              best_query_term = query_term.clone();
+              best_doc_term = doc_term.clone();
+              
+              // OPTIMIZATION: Early cutoff if we find a near-perfect match
+              if similarity > 0.95 {
+                break 'outer;
+              }
             }
           }
         }
@@ -112,11 +134,11 @@ impl FuzzySearch {
     }
 
     // If a match was found above the threshold, create a SearusMatch.
-    if let Some((original, matched)) = best_match {
+    if max_similarity >= self.threshold {
       let mut m = SearusMatch::new(item.clone(), max_similarity as f32, index);
       m.details.push(SearchDetail::Fuzzy {
-        matched_term: matched,
-        original_term: original,
+        matched_term: best_doc_term,
+        original_term: best_query_term,
         similarity: max_similarity as f32,
       });
 
@@ -176,18 +198,31 @@ where
     }
 
     #[cfg(feature = "parallel")]
-    let mut results: Vec<SearusMatch<T>> = items
-      .par_iter()
-      .enumerate()
-      .filter_map(|(index, item)| self.match_entity(item, index, query, &query_terms))
-      .collect();
+    let mut results: Vec<SearusMatch<T>> = {
+      // OPTIMIZATION: Pre-allocate result vector
+      let matches: Vec<_> = items
+        .par_iter()
+        .enumerate()
+        .filter_map(|(index, item)| self.match_entity(item, index, query, &query_terms))
+        .collect();
+      
+      let mut results = Vec::with_capacity(matches.len());
+      results.extend(matches);
+      results
+    };
 
     #[cfg(not(feature = "parallel"))]
-    let mut results: Vec<SearusMatch<T>> = items
-      .iter()
-      .enumerate()
-      .filter_map(|(index, item)| self.match_entity(item, index, query, &query_terms))
-      .collect();
+    let mut results: Vec<SearusMatch<T>> = {
+      // OPTIMIZATION: Pre-allocate with estimated capacity
+      let mut results = Vec::with_capacity(items.len() / 20); // Fuzzy matches are typically rare
+      results.extend(
+        items
+          .iter()
+          .enumerate()
+          .filter_map(|(index, item)| self.match_entity(item, index, query, &query_terms))
+      );
+      results
+    };
 
     // Sort results by score in descending order.
     self.sort_results(&mut results);

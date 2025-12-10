@@ -198,18 +198,31 @@ where
 
     // Score each item
     #[cfg(feature = "parallel")]
-    let mut results: Vec<SearusMatch<T>> = items
-      .par_iter()
-      .enumerate()
-      .filter_map(|(index, item)| self.match_entity(item, index, query, &stats, &query_terms))
-      .collect();
+    let mut results: Vec<SearusMatch<T>> = {
+      // OPTIMIZATION: Collect into pre-allocated vector
+      let matches: Vec<_> = items
+        .par_iter()
+        .enumerate()
+        .filter_map(|(index, item)| self.match_entity(item, index, query, &stats, &query_terms))
+        .collect();
+      
+      let mut results = Vec::with_capacity(matches.len());
+      results.extend(matches);
+      results
+    };
 
     #[cfg(not(feature = "parallel"))]
-    let mut results: Vec<SearusMatch<T>> = items
-      .iter()
-      .enumerate()
-      .filter_map(|(index, item)| self.match_entity(item, index, query, &stats, &query_terms))
-      .collect();
+    let mut results: Vec<SearusMatch<T>> = {
+      // OPTIMIZATION: Pre-allocate with estimated capacity
+      let mut results = Vec::with_capacity(items.len() / 10); // Assume ~10% match rate
+      results.extend(
+        items
+          .iter()
+          .enumerate()
+          .filter_map(|(index, item)| self.match_entity(item, index, query, &stats, &query_terms))
+      );
+      results
+    };
 
     // Sort by score descending
     self.sort_results(&mut results);

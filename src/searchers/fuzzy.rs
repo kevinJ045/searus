@@ -1,5 +1,6 @@
 //! A `Searcher` implementation for fuzzy (approximate) string matching.
 
+use crate::context::SearchContext;
 use crate::prelude::*;
 use crate::searchers::tokenizer::tokenize;
 use serde_json::Value;
@@ -186,7 +187,8 @@ where
   /// If a pair of terms has a similarity score that exceeds the configured
   /// threshold, it is considered a match. The highest similarity score found
   /// for an item is used as its raw score.
-  fn search(&self, query: &Query, items: &[T]) -> Vec<SearusMatch<T>> {
+  fn search(&self, context: &SearchContext<T>, query: &Query) -> Vec<SearusMatch<T>> {
+    let items = context.items;
     let query_text = match &query.text {
       Some(text) => text,
       None => return Vec::new(),

@@ -1,5 +1,6 @@
 //! The main search engine that coordinates multiple searchers.
 
+use crate::context::SearchContext;
 use crate::searcher::Searcher;
 use crate::types::{Query, Searchable, SearcherKind, SearusMatch};
 use std::collections::HashMap;
@@ -52,13 +53,15 @@ impl<T: Searchable> SearusEngine<T> {
       return Vec::new();
     }
 
+    let context = SearchContext::new(items);
+
     // Collect results from all searchers
     // OPTIMIZATION: Run all searchers in parallel when parallel feature is enabled
     #[cfg(feature = "parallel")]
     let all_results: Vec<(SearcherKind, Vec<SearusMatch<T>>)> = self
       .searchers
       .par_iter()
-      .map(|searcher| (searcher.kind(), searcher.search(query, items)))
+      .map(|searcher| (searcher.kind(), searcher.search(&context, query)))
       .filter(|(_, results)| !results.is_empty())
       .collect();
 
@@ -66,7 +69,7 @@ impl<T: Searchable> SearusEngine<T> {
     let all_results: Vec<(SearcherKind, Vec<SearusMatch<T>>)> = self
       .searchers
       .iter()
-      .map(|searcher| (searcher.kind(), searcher.search(query, items)))
+      .map(|searcher| (searcher.kind(), searcher.search(&context, query)))
       .filter(|(_, results)| !results.is_empty())
       .collect();
 

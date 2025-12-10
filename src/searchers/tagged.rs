@@ -1,5 +1,6 @@
 //! A `Searcher` implementation for matching tags.
 
+use crate::context::SearchContext;
 use crate::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -208,7 +209,8 @@ where
   /// The raw score for a matched item is calculated as the ratio of the number
   /// of matching tags to the total number of tags in the query. For example, if
   /// the query has 4 tags and the item matches 2 of them, the score will be 0.5.
-  fn search(&self, query: &Query, items: &[T]) -> Vec<SearusMatch<T>> {
+  fn search(&self, context: &SearchContext<T>, query: &Query) -> Vec<SearusMatch<T>> {
+    let items = context.items;
     let query_tags = match &query.tags {
       Some(tags) => tags,
       None => return Vec::new(),

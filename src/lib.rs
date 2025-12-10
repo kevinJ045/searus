@@ -3,6 +3,8 @@
 //! Searus provides a unified interface for different search strategies including
 //! semantic search, vector search, tag-based search, and fuzzy matching.
 
+/// Defines the search context.
+pub mod context;
 /// Contains components for generating embeddings from data.
 pub mod embeddings;
 /// The core search engine component.
@@ -23,6 +25,7 @@ pub mod types;
 pub mod prelude {
   //! Convenient re-exports for common types and traits.
 
+  pub use crate::context::*;
   pub use crate::embeddings::*;
   pub use crate::engine::*;
   pub use crate::filter::*;

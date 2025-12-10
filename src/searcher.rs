@@ -1,5 +1,6 @@
 //! The `Searcher` trait, which defines the interface for search plugins.
 
+use crate::context::SearchContext;
 use crate::types::{Query, Searchable, SearcherKind, SearusMatch};
 
 /// A trait for searcher plugins that can perform a search operation.
@@ -26,7 +27,11 @@ pub trait Searcher<T: Searchable>: Send + Sync {
   ///   searcher implementation is responsible for extracting the parts of the
   ///   query that are relevant to it (e.g., a semantic searcher would use
   ///   `query.text`, while a tag searcher would use `query.tags`).
-  /// * `items` - A slice of items to search through.
+  /// * `context` - The `SearchContext` providing access to the items and shared resources.
+  /// * `query` - The `Query` object containing the search parameters. Each
+  ///   searcher implementation is responsible for extracting the parts of the
+  ///   query that are relevant to it (e.g., a semantic searcher would use
+  ///   `query.text`, while a tag searcher would use `query.tags`).
   ///
   /// # Returns
   ///
@@ -34,5 +39,5 @@ pub trait Searcher<T: Searchable>: Send + Sync {
   /// The scores in these matches are expected to be "raw" scores, meaning they
   /// have not yet been normalized. The `SearusEngine` will handle normalization
   /// before merging results.
-  fn search(&self, query: &Query, items: &[T]) -> Vec<SearusMatch<T>>;
+  fn search(&self, context: &SearchContext<T>, query: &Query) -> Vec<SearusMatch<T>>;
 }

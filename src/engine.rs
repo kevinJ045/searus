@@ -1,7 +1,7 @@
 //! The main search engine that coordinates multiple searchers.
 
 use crate::searcher::Searcher;
-use crate::types::{Query, SearcherKind, SearusMatch};
+use crate::types::{Query, Searchable, SearcherKind, SearusMatch};
 use std::collections::HashMap;
 
 /// The main search engine that coordinates multiple searchers.
@@ -16,7 +16,7 @@ pub struct SearusEngine<T> {
   normalization: NormalizationMethod,
 }
 
-impl<T> SearusEngine<T> {
+impl<T: Searchable> SearusEngine<T> {
   /// Creates a new `SearusEngineBuilder` to construct an engine.
   pub fn builder() -> SearusEngineBuilder<T> {
     SearusEngineBuilder::new()

@@ -10,10 +10,25 @@ keywords = ["search", "semantic", "fuzzy", "vector", "bm25"]
 categories = ["algorithms", "data-structures"]
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-unicode-segmentation = "1.10"
-strsim = "0.11"
+serde = { version = "1.0", optional = true, features = ["derive"] }
+serde_json = { version = "1.0", optional = true }
+unicode-segmentation = { version = "1.10", optional = true }
+strsim = { version = "0.11", optional = true }
+rayon = { version = "1.11.0", optional = true }
+dashmap = { version = "5.0.2", optional = true }
+
+[features]
+default = ["semantic", "fuzzy", "tagged"]
+
+serde = ["dep:serde", "dep:serde_json"]
+
+semantic = ["serde", "dep:unicode-segmentation"]
+fuzzy = ["serde", "dep:strsim", "dep:unicode-segmentation"]
+tagged = ["serde"]
+
+parallel = ["dep:rayon", "dep:dashmap"]
+
+# parallel + semantic = ["dep:dashmap"]
 
 [[example]]
 name = "basic_semantic"
@@ -22,3 +37,7 @@ path = "examples/basic_semantic.rs"
 [[example]]
 name = "multi_searcher"
 path = "examples/multi_searcher.rs"
+
+[[example]]
+name = "time_check"
+path = "examples/time_check.rs"

@@ -5,6 +5,19 @@ use crate::searchers::tokenizer::tokenize;
 use serde_json::Value;
 use strsim::jaro_winkler;
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
+#[cfg(feature = "parallel")]
+pub trait FuzzySearchable: serde::Serialize + Clone + Send + Sync {}
+#[cfg(feature = "parallel")]
+impl<T: serde::Serialize + Clone + Send + Sync> FuzzySearchable for T {}
+
+#[cfg(not(feature = "parallel"))]
+pub trait FuzzySearchable: serde::Serialize + Clone {}
+#[cfg(not(feature = "parallel"))]
+impl<T: serde::Serialize + Clone> FuzzySearchable for T {}
+
 /// A searcher that performs fuzzy string matching using the Jaro-Winkler similarity algorithm.
 ///
 /// `FuzzySearch` is useful for finding matches that are not exact, which can help
@@ -64,9 +77,79 @@ impl FuzzySearch {
   }
 }
 
+impl FuzzySearch {
+  /// Match a single entity against the query.
+  pub fn match_entity<T>(
+    &self,
+    item: &T,
+    index: usize,
+    _query: &Query,
+    query_terms: &[String],
+  ) -> Option<SearusMatch<T>>
+  where
+    T: FuzzySearchable,
+  {
+    let mut max_similarity = 0.0;
+    let mut best_match = None;
+
+    // Check each configured field for a fuzzy match.
+    for field_name in &self.fields {
+      if let Some(text) = Self::extract_field(item, field_name) {
+        let doc_terms = tokenize(&text);
+
+        // Find the best fuzzy match between query terms and document terms.
+        for query_term in query_terms {
+          for doc_term in &doc_terms {
+            let similarity = jaro_winkler(query_term, doc_term);
+
+            if similarity > max_similarity && similarity >= self.threshold {
+              max_similarity = similarity;
+              best_match = Some((query_term.clone(), doc_term.clone()));
+            }
+          }
+        }
+      }
+    }
+
+    // If a match was found above the threshold, create a SearusMatch.
+    if let Some((original, matched)) = best_match {
+      let mut m = SearusMatch::new(item.clone(), max_similarity as f32, index);
+      m.details.push(SearchDetail::Fuzzy {
+        matched_term: matched,
+        original_term: original,
+        similarity: max_similarity as f32,
+      });
+
+      Some(m)
+    } else {
+      None
+    }
+  }
+
+  /// Sort the search results.
+  #[cfg(feature = "parallel")]
+  pub fn sort_results<T: Send + Sync>(&self, results: &mut Vec<SearusMatch<T>>) {
+    results.par_sort_by(|a, b| {
+      b.score
+        .partial_cmp(&a.score)
+        .unwrap_or(std::cmp::Ordering::Equal)
+    });
+  }
+
+  /// Sort the search results.
+  #[cfg(not(feature = "parallel"))]
+  pub fn sort_results<T>(&self, results: &mut Vec<SearusMatch<T>>) {
+    results.sort_by(|a, b| {
+      b.score
+        .partial_cmp(&a.score)
+        .unwrap_or(std::cmp::Ordering::Equal)
+    });
+  }
+}
+
 impl<T> Searcher<T> for FuzzySearch
 where
-  T: serde::Serialize + Clone,
+  T: FuzzySearchable,
 {
   fn kind(&self) -> SearcherKind {
     SearcherKind::Fuzzy
@@ -92,50 +175,22 @@ where
       return Vec::new();
     }
 
-    let mut results = Vec::new();
+    #[cfg(feature = "parallel")]
+    let mut results: Vec<SearusMatch<T>> = items
+      .par_iter()
+      .enumerate()
+      .filter_map(|(index, item)| self.match_entity(item, index, query, &query_terms))
+      .collect();
 
-    for (index, item) in items.iter().enumerate() {
-      let mut max_similarity = 0.0;
-      let mut best_match = None;
-
-      // Check each configured field for a fuzzy match.
-      for field_name in &self.fields {
-        if let Some(text) = Self::extract_field(item, field_name) {
-          let doc_terms = tokenize(&text);
-
-          // Find the best fuzzy match between query terms and document terms.
-          for query_term in &query_terms {
-            for doc_term in &doc_terms {
-              let similarity = jaro_winkler(query_term, doc_term);
-
-              if similarity > max_similarity && similarity >= self.threshold {
-                max_similarity = similarity;
-                best_match = Some((query_term.clone(), doc_term.clone()));
-              }
-            }
-          }
-        }
-      }
-
-      // If a match was found above the threshold, create a SearusMatch.
-      if let Some((original, matched)) = best_match {
-        let mut m = SearusMatch::new(item.clone(), max_similarity as f32, index);
-        m.details.push(SearchDetail::Fuzzy {
-          matched_term: matched,
-          original_term: original,
-          similarity: max_similarity as f32,
-        });
-
-        results.push(m);
-      }
-    }
+    #[cfg(not(feature = "parallel"))]
+    let mut results: Vec<SearusMatch<T>> = items
+      .iter()
+      .enumerate()
+      .filter_map(|(index, item)| self.match_entity(item, index, query, &query_terms))
+      .collect();
 
     // Sort results by score in descending order.
-    results.sort_by(|a, b| {
-      b.score
-        .partial_cmp(&a.score)
-        .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    self.sort_results(&mut results);
 
     results
   }

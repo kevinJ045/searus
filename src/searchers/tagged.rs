@@ -3,6 +3,19 @@
 use crate::prelude::*;
 use serde_json::Value;
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
+#[cfg(feature = "parallel")]
+pub trait TaggedSearchable: serde::Serialize + Clone + Send + Sync {}
+#[cfg(feature = "parallel")]
+impl<T: serde::Serialize + Clone + Send + Sync> TaggedSearchable for T {}
+
+#[cfg(not(feature = "parallel"))]
+pub trait TaggedSearchable: serde::Serialize + Clone {}
+#[cfg(not(feature = "parallel"))]
+impl<T: serde::Serialize + Clone> TaggedSearchable for T {}
+
 /// A searcher that finds items by matching tags.
 ///
 /// `TaggedSearch` is designed to filter or score items based on a list of tags.
@@ -68,7 +81,7 @@ impl Default for TaggedSearch {
 
 impl<T> Searcher<T> for TaggedSearch
 where
-  T: serde::Serialize + Clone,
+  T: TaggedSearchable,
 {
   fn kind(&self) -> SearcherKind {
     SearcherKind::Tags
@@ -93,44 +106,85 @@ where
       return Vec::new();
     }
 
-    let mut results = Vec::new();
+    #[cfg(feature = "parallel")]
+    let mut results: Vec<SearusMatch<T>> = items
+      .par_iter()
+      .enumerate()
+      .filter_map(|(index, item)| self.match_entity(item, index, query, query_tags))
+      .collect();
 
-    for (index, item) in items.iter().enumerate() {
-      let item_tags = Self::extract_tags(item, &self.tag_field);
-      if item_tags.is_empty() {
-        continue;
-      }
+    #[cfg(not(feature = "parallel"))]
+    let mut results: Vec<SearusMatch<T>> = items
+      .iter()
+      .enumerate()
+      .filter_map(|(index, item)| self.match_entity(item, index, query, query_tags))
+      .collect();
 
-      // Find all tags that match between the query and the item.
-      let mut matched_tags = Vec::new();
-      for query_tag in query_tags {
-        if item_tags.iter().any(|t| t.eq_ignore_ascii_case(query_tag)) {
-          matched_tags.push(query_tag.clone());
-        }
-      }
+    // Sort results by score in descending order.
+    self.sort_results(&mut results);
 
-      // If there are any matches, create a SearusMatch.
-      if !matched_tags.is_empty() {
-        // The score is the proportion of matched query tags.
-        let score = matched_tags.len() as f32 / query_tags.len() as f32;
+    results
+  }
+}
 
-        let mut m = SearusMatch::new(item.clone(), score, index);
-        m.details.push(SearchDetail::Tag {
-          matched_tags,
-          total_tags: item_tags.len(),
-        });
+impl TaggedSearch {
+  /// Match a single entity against the query.
+  pub fn match_entity<T>(
+    &self,
+    item: &T,
+    index: usize,
+    _query: &Query,
+    query_tags: &[String],
+  ) -> Option<SearusMatch<T>>
+  where
+    T: TaggedSearchable,
+  {
+    let item_tags = Self::extract_tags(item, &self.tag_field);
+    if item_tags.is_empty() {
+      return None;
+    }
 
-        results.push(m);
+    // Find all tags that match between the query and the item.
+    let mut matched_tags = Vec::new();
+    for query_tag in query_tags {
+      if item_tags.iter().any(|t| t.eq_ignore_ascii_case(query_tag)) {
+        matched_tags.push(query_tag.clone());
       }
     }
 
-    // Sort results by score in descending order.
+    // If there are any matches, create a SearusMatch.
+    if !matched_tags.is_empty() {
+      // The score is the proportion of matched query tags.
+      let score = matched_tags.len() as f32 / query_tags.len() as f32;
+
+      let mut m = SearusMatch::new(item.clone(), score, index);
+      m.details.push(SearchDetail::Tag {
+        matched_tags,
+        total_tags: item_tags.len(),
+      });
+
+      Some(m)
+    } else {
+      None
+    }
+  }
+
+  /// Sort the search results.
+  #[cfg(feature = "parallel")]
+  pub fn sort_results<T: Send + Sync>(&self, results: &mut Vec<SearusMatch<T>>) {
+    results.par_sort_by(|a, b| {
+      b.score
+        .partial_cmp(&a.score)
+        .unwrap_or(std::cmp::Ordering::Equal)
+    });
+  }
+
+  #[cfg(not(feature = "parallel"))]
+  pub fn sort_results<T>(&self, results: &mut Vec<SearusMatch<T>>) {
     results.sort_by(|a, b| {
       b.score
         .partial_cmp(&a.score)
         .unwrap_or(std::cmp::Ordering::Equal)
     });
-
-    results
   }
 }

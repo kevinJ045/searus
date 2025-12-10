@@ -3,6 +3,16 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+#[cfg(feature = "parallel")]
+pub trait Searchable: Send + Sync {}
+#[cfg(feature = "parallel")]
+impl<T: Send + Sync> Searchable for T {}
+
+#[cfg(not(feature = "parallel"))]
+pub trait Searchable {}
+#[cfg(not(feature = "parallel"))]
+impl<T> Searchable for T {}
+
 /// Type alias for entity identifiers.
 ///
 /// Using a dedicated type alias makes it easier to change the underlying type
@@ -15,6 +25,7 @@ pub type EntityId = String;
 /// the item itself, a normalized score indicating the relevance of the match,
 /// and detailed metadata about why this item was matched.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(not(feature = "parallel"))]
 pub struct SearusMatch<T> {
   /// The matched item or entity that was found in the search.
   pub item: T,
@@ -37,7 +48,34 @@ pub struct SearusMatch<T> {
   pub id: usize,
 }
 
-impl<T> SearusMatch<T> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(feature = "parallel")]
+pub struct SearusMatch<T>
+where
+  T: Send + Sync,
+{
+  /// The matched item or entity that was found in the search.
+  pub item: T,
+  /// The final normalized score, ranging from 0.0 to 1.0, where a higher score
+  /// indicates a better match. This score is often a blended result from multiple
+  /// underlying search mechanisms.
+  pub score: f32,
+  /// An optional breakdown of scores per field, providing explainability for
+  /// why the item received its final score. For example, in a text search, this
+  /// could show the scores for matches in the 'title' vs. 'description' fields.
+  #[serde(skip_serializing_if = "HashMap::is_empty")]
+  pub field_scores: HashMap<String, f32>,
+  /// A list of searcher-specific details that provide low-level metadata about
+  /// the match. This can include information about which terms matched, the
+  /// vector similarity, or other details from the specific searcher that
+  /// produced this match.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub details: Vec<SearchDetail>,
+
+  pub id: usize,
+}
+
+impl<T: Searchable> SearusMatch<T> {
   /// Creates a new search match with a given item and score.
   ///
   /// This is a convenience method for creating a `SearusMatch` with default
@@ -77,6 +115,7 @@ impl<T> SearusMatch<T> {
 #[serde(tag = "type")]
 pub enum SearchDetail {
   /// Details for a semantic text match from a searcher like BM25.
+  #[cfg(feature = "semantic")]
   Semantic {
     /// The specific terms that were matched within the text.
     matched_terms: Vec<String>,
@@ -93,6 +132,7 @@ pub enum SearchDetail {
     similarity: f32,
   },
   /// Details for a tag-based match.
+  #[cfg(feature = "tagged")]
   Tag {
     /// The tags that matched the query.
     matched_tags: Vec<String>,
@@ -100,6 +140,7 @@ pub enum SearchDetail {
     total_tags: usize,
   },
   /// Details for a fuzzy (approximate) string match.
+  #[cfg(feature = "fuzzy")]
   Fuzzy {
     /// The term from the item that was matched.
     matched_term: String,
@@ -297,14 +338,17 @@ impl SearchOptions {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SearcherKind {
   /// A searcher based on semantic text analysis (e.g., BM25).
+  #[cfg(feature = "semantic")]
   Semantic,
   /// A searcher based on vector similarity.
   Vector,
   /// A searcher that matches based on tags.
+  #[cfg(feature = "tagged")]
   Tags,
   /// A searcher for image similarity.
   Image,
   /// A searcher for fuzzy (approximate) string matching.
+  #[cfg(feature = "fuzzy")]
   Fuzzy,
   /// A searcher for numerical or date ranges.
   Range,

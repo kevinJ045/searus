@@ -1,6 +1,6 @@
 //! The `Searcher` trait, which defines the interface for search plugins.
 
-use crate::types::{Query, SearcherKind, SearusMatch};
+use crate::types::{Query, Searchable, SearcherKind, SearusMatch};
 
 /// A trait for searcher plugins that can perform a search operation.
 ///
@@ -11,7 +11,7 @@ use crate::types::{Query, SearcherKind, SearusMatch};
 ///
 /// The `Send` and `Sync` bounds are required to allow searchers to be used
 /// concurrently by the engine.
-pub trait Searcher<T>: Send + Sync {
+pub trait Searcher<T: Searchable>: Send + Sync {
   /// Returns the `SearcherKind` of this searcher.
   ///
   /// This is used by the `SearusEngine` to identify the searcher and apply

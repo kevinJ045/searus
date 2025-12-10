@@ -8,7 +8,11 @@ mod common;
 fn main() {
   println!("=== Searus Search Time Check Example ===\n");
 
-  println!("Features: {:?}", std::env::var("CARGO_FEATURES"));
+  if cfg!(feature = "parallel") {
+    println!("Running as parallel");
+  } else {
+    println!("Running as sequential");
+  }
 
   // Create sample blog posts
   let mut posts = common::sample_posts();

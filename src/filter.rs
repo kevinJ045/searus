@@ -6,6 +6,11 @@
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
+use crate::types::Searchable;
+
 /// An enum representing the nodes of a filter expression AST.
 ///
 /// This AST allows for the creation of complex boolean queries involving
@@ -87,7 +92,7 @@ fn compare_values(
 
   match (field_value, target_value) {
     (serde_json::Value::String(s), FilterValue::String(t)) if *op == CompareOp::Contains => {
-      s.contains(t)
+      s.to_lowercase().contains(&t.to_lowercase())
     }
     (serde_json::Value::String(s), FilterValue::String(t)) => compare_ord(s, op, t),
     (serde_json::Value::Number(n), FilterValue::Number(t)) => {
@@ -160,4 +165,67 @@ pub enum FilterValue {
   Number(f64),
   /// A boolean value.
   Bool(bool),
+}
+
+impl From<String> for FilterValue {
+  fn from(s: String) -> Self {
+    FilterValue::String(s)
+  }
+}
+
+impl From<&str> for FilterValue {
+  fn from(s: &str) -> Self {
+    FilterValue::String(s.to_string())
+  }
+}
+
+impl From<bool> for FilterValue {
+  fn from(b: bool) -> Self {
+    FilterValue::Bool(b)
+  }
+}
+
+impl From<i32> for FilterValue {
+  fn from(n: i32) -> Self {
+    FilterValue::Number(n as f64)
+  }
+}
+
+impl From<i64> for FilterValue {
+  fn from(n: i64) -> Self {
+    FilterValue::Number(n as f64)
+  }
+}
+
+impl From<f32> for FilterValue {
+  fn from(n: f32) -> Self {
+    FilterValue::Number(n as f64)
+  }
+}
+
+impl From<f64> for FilterValue {
+  fn from(n: f64) -> Self {
+    FilterValue::Number(n)
+  }
+}
+
+pub fn filter_items<T>(items: &[T], filters: &FilterExpr) -> Vec<T>
+where
+  T: Searchable + Clone + Serialize,
+{
+  #[cfg(feature = "parallel")]
+  let items: Vec<T> = items
+    .par_iter()
+    .filter(|item| filters.evaluate(item))
+    .cloned()
+    .collect();
+
+  #[cfg(not(feature = "parallel"))]
+  let items: Vec<T> = items
+    .iter()
+    .filter(|item| filters.evaluate(item))
+    .cloned()
+    .collect();
+
+  items
 }

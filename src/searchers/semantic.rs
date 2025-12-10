@@ -203,9 +203,16 @@ where
       let matches: Vec<_> = items
         .par_iter()
         .enumerate()
+        .filter(|(_, item)| {
+           if let Some(filters) = &query.filters {
+             filters.evaluate(item)
+           } else {
+             true
+           }
+        })
         .filter_map(|(index, item)| self.match_entity(item, index, query, &stats, &query_terms))
         .collect();
-      
+
       let mut results = Vec::with_capacity(matches.len());
       results.extend(matches);
       results
@@ -219,7 +226,14 @@ where
         items
           .iter()
           .enumerate()
-          .filter_map(|(index, item)| self.match_entity(item, index, query, &stats, &query_terms))
+          .filter(|(_, item)| {
+             if let Some(filters) = &query.filters {
+               filters.evaluate(item)
+             } else {
+               true
+             }
+          })
+          .filter_map(|(index, item)| self.match_entity(item, index, query, &stats, &query_terms)),
       );
       results
     };
@@ -304,19 +318,13 @@ impl SemanticSearch {
     &self,
     item: &T,
     index: usize,
-    query: &Query,
+    _query: &Query,
     stats: &CorpusStats,
     query_terms: &[String],
   ) -> Option<SearusMatch<T>>
   where
     T: SemanticSearchable,
   {
-    if let Some(filters) = &query.filters {
-      if !filters.evaluate(item) {
-        return None;
-      }
-    }
-
     let mut total_score = 0.0;
     let mut field_scores = HashMap::new();
     let mut matched_terms = Vec::new();

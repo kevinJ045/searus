@@ -203,6 +203,13 @@ where
       let matches: Vec<_> = items
         .par_iter()
         .enumerate()
+        .filter(|(_, item)| {
+           if let Some(filters) = &query.filters {
+             filters.evaluate(item)
+           } else {
+             true
+           }
+        })
         .filter_map(|(index, item)| self.match_entity(item, index, query, &query_terms))
         .collect();
       
@@ -219,6 +226,13 @@ where
         items
           .iter()
           .enumerate()
+          .filter(|(_, item)| {
+             if let Some(filters) = &query.filters {
+               filters.evaluate(item)
+             } else {
+               true
+             }
+          })
           .filter_map(|(index, item)| self.match_entity(item, index, query, &query_terms))
       );
       results

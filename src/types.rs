@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::filter::{CompareOp, FilterExpr, FilterValue};
+
 #[cfg(feature = "parallel")]
 pub trait Searchable: Send + Sync {}
 #[cfg(feature = "parallel")]
@@ -181,9 +183,118 @@ pub struct Query {
 }
 
 impl Query {
+  pub const AND: i32 = 1;
+  pub const OR: i32 = 2;
+  pub const NOT: i32 = 3;
+  pub const COMPARE: i32 = 0;
+
   /// Creates a new `QueryBuilder` to construct a `Query` in a chained manner.
   pub fn builder() -> QueryBuilder {
     QueryBuilder::default()
+  }
+
+  pub fn filter(filter_type: i32) -> FilterBuilder {
+    match filter_type {
+      1 => FilterBuilder {
+        filter: FilterExpr::And(Vec::new()),
+      },
+      2 => FilterBuilder {
+        filter: FilterExpr::Or(Vec::new()),
+      },
+      3 => FilterBuilder {
+        filter: FilterExpr::Not(Box::new(FilterExpr::Or(Vec::new()))),
+      },
+      _ => FilterBuilder {
+        filter: FilterExpr::Compare {
+          field: "".to_string(),
+          op: crate::filter::CompareOp::Contains,
+          value: FilterValue::String("".to_string()),
+        },
+      },
+    }
+  }
+}
+
+pub struct FilterBuilder {
+  filter: FilterExpr,
+}
+
+impl FilterBuilder {
+  pub fn with(mut self, value: FilterExpr) -> Self {
+    match self.filter {
+      FilterExpr::And(ref mut items) => items.push(value),
+      FilterExpr::Not(ref mut item) => *item = Box::new(value),
+      FilterExpr::Or(ref mut items) => items.push(value),
+      _ => {}
+    }
+    self
+  }
+
+  pub fn eq(mut self, field: impl Into<String>, value: impl Into<FilterValue>) -> Self {
+    self.filter = FilterExpr::Compare {
+      field: field.into(),
+      op: CompareOp::Eq,
+      value: value.into(),
+    };
+    self
+  }
+
+  pub fn ne(mut self, field: impl Into<String>, value: impl Into<FilterValue>) -> Self {
+    self.filter = FilterExpr::Compare {
+      field: field.into(),
+      op: CompareOp::Ne,
+      value: value.into(),
+    };
+    self
+  }
+
+  pub fn lt(mut self, field: impl Into<String>, value: impl Into<FilterValue>) -> Self {
+    self.filter = FilterExpr::Compare {
+      field: field.into(),
+      op: CompareOp::Lt,
+      value: value.into(),
+    };
+    self
+  }
+
+  pub fn le(mut self, field: impl Into<String>, value: impl Into<FilterValue>) -> Self {
+    self.filter = FilterExpr::Compare {
+      field: field.into(),
+      op: CompareOp::Le,
+      value: value.into(),
+    };
+    self
+  }
+
+  pub fn gt(mut self, field: impl Into<String>, value: impl Into<FilterValue>) -> Self {
+    self.filter = FilterExpr::Compare {
+      field: field.into(),
+      op: CompareOp::Gt,
+      value: value.into(),
+    };
+    self
+  }
+
+  pub fn ge(mut self, field: impl Into<String>, value: impl Into<FilterValue>) -> Self {
+    self.filter = FilterExpr::Compare {
+      field: field.into(),
+      op: CompareOp::Ge,
+      value: value.into(),
+    };
+    self
+  }
+
+  pub fn contains(mut self, field: impl Into<String>, value: impl Into<FilterValue>) -> Self {
+    self.filter = FilterExpr::Compare {
+      field: field.into(),
+      op: CompareOp::Contains,
+      value: value.into(),
+    };
+    self
+  }
+
+  pub fn build(self) -> FilterExpr {
+    self.filter
   }
 }
 
@@ -238,6 +349,18 @@ impl QueryBuilder {
     self
   }
 
+  /// Enables Tag Relationship Tree expansion with the specified depth.
+  ///
+  /// This is a convenience method that sets the `trt_depth` option.
+  ///
+  /// # Arguments
+  ///
+  /// * `depth` - Maximum depth to traverse in the Tag Relationship Tree
+  pub fn with_trt(mut self, depth: usize) -> Self {
+    self.options.trt_depth = Some(depth);
+    self
+  }
+
   /// Builds the final `Query` object.
   pub fn build(self) -> Query {
     Query {
@@ -287,6 +410,11 @@ pub struct SearchOptions {
   /// semantic search and tag-based search.
   #[serde(default)]
   pub weights: HashMap<SearcherKind, f32>,
+  /// Optional maximum depth for Tag Relationship Tree (TRT) expansion.
+  /// Only applies to TaggedSearch when a TRT is configured.
+  /// A value of None or 0 means no TRT expansion.
+  #[serde(default)]
+  pub trt_depth: Option<usize>,
 }
 
 /// Returns the default limit for search results.
@@ -302,6 +430,7 @@ impl Default for SearchOptions {
       limit: default_limit(),
       timeout_ms: 0,
       weights: HashMap::new(),
+      trt_depth: None,
     }
   }
 }
@@ -328,6 +457,12 @@ impl SearchOptions {
   /// Sets a weight for a specific kind of searcher.
   pub fn weight(mut self, kind: SearcherKind, weight: f32) -> Self {
     self.weights.insert(kind, weight);
+    self
+  }
+
+  /// Sets the maximum depth for Tag Relationship Tree expansion.
+  pub fn trt_depth(mut self, depth: usize) -> Self {
+    self.trt_depth = Some(depth);
     self
   }
 }

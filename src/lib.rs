@@ -9,6 +9,8 @@ pub mod context;
 pub mod embeddings;
 /// The core search engine component.
 pub mod engine;
+/// Defines the extension system.
+pub mod extension;
 /// Provides filtering capabilities for search results.
 pub mod filter;
 /// Defines the indexing structures for efficient search.
@@ -28,6 +30,7 @@ pub mod prelude {
   pub use crate::context::*;
   pub use crate::embeddings::*;
   pub use crate::engine::*;
+  pub use crate::extension::*;
   pub use crate::filter::*;
   pub use crate::index::*;
   pub use crate::rules::*;

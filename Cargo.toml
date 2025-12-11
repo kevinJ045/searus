@@ -28,8 +28,6 @@ tagged = ["serde"]
 
 parallel = ["dep:rayon", "dep:dashmap"]
 
-# parallel + semantic = ["dep:dashmap"]
-
 [[example]]
 name = "basic_semantic"
 path = "examples/basic_semantic.rs"

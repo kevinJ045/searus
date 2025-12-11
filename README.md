@@ -31,7 +31,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-searus = "0.1.0"
+searus = "0.0.3"
 ```
 
 ## Quick Start
@@ -207,6 +207,64 @@ let query = Query::builder()
     .build();
 ```
 
+## Extensions
+
+Customize the search lifecycle with the `SearusExtension` trait. Extensions can intercept queries, modify items, and alter results.
+
+```rust
+use searus::prelude::*;
+
+struct LoggingExtension;
+
+impl<T: Searchable> SearusExtension<T> for LoggingExtension {
+    fn before_query(&self, query: &mut Query) {
+        println!("Executing query: {:?}", query);
+    }
+
+    fn after_searcher(&self, _query: &Query, results: &mut Vec<SearusMatch<T>>) {
+        println!("Searcher returned {} results", results.len());
+    }
+}
+
+// Register extension in the engine
+let engine: SearusEngine<Post> = SearusEngine::builder()
+    .with(Box::new(searcher))
+    .with_extension(Box::new(LoggingExtension))
+    .build();
+```
+
+## Custom Searchers
+
+Implement your own search strategies by implementing the `Searcher` trait.
+
+```rust
+use searus::prelude::*;
+
+struct MySearcher;
+
+impl<T: Searchable> Searcher<T> for MySearcher {
+    fn kind(&self) -> SearcherKind {
+        SearcherKind::Custom
+    }
+
+    fn search(&self, context: &SearchContext<T>, query: &Query) -> Vec<SearusMatch<T>> {
+        // Implement your search logic here
+        vec![]
+    }
+}
+```
+
+This allows you to plug in any algorithm (e.g., TF-IDF, LSH, experimental models) and combine it with built-in searchers.
+
+## Optimization
+
+For large datasets (100k+ entities), consider these optimization strategies:
+
+1.  **Precomputation**: Pre-tokenize text and pre-compute embeddings.
+2.  **Parallelism**: Enable the `parallel` feature to use `rayon` for concurrent search execution.
+3.  **Early Filtering**: Apply cheap filters (tags, exact matches) before expensive semantic or vector searches.
+4.  **Approximate Nearest Neighbors (ANN)**: Use an `IndexAdapter` that supports ANN (e.g., HNSW) instead of brute-force KNN.
+
 ## Index Adapters
 
 Searus supports pluggable storage backends through the `IndexAdapter` trait:
@@ -262,7 +320,7 @@ let query = Query::builder()
             .weight(SearcherKind::Tags, 0.3)
     )
     .filters(
-        // [views>=1000] OR [author=Bob]
+        // views >= 1000 OR  author = Bob
         Query::filter(Query::OR)
             .with(
               Query::filter(Query::COMPARE)
@@ -320,39 +378,27 @@ cargo run --example basic_semantic
 
 # Multi-strategy search
 cargo run --example multi_searcher
-```
 
-## Architecture
+# Time check
+cargo run --example time_check --features parallel
 
-```
-searus/
-├── types.rs          # Core types (Query, SearusMatch, SearchOptions)
-├── searcher.rs       # Searcher trait
-├── engine.rs         # SearusEngine (orchestrates multiple searchers)
-├── rules.rs          # Semantic rules DSL
-├── filter.rs         # Filter expressions (future)
-├── embeddings/       # Embedding provider traits
-│   └── mod.rs
-├── index/            # Storage adapters
-│   ├── adapter.rs    # IndexAdapter trait
-│   └── memory.rs     # In-memory implementation
-└── searchers/        # Search implementations
-    ├── tokenizer.rs  # Text tokenization
-    ├── bm25.rs       # BM25 scorer
-    ├── semantic.rs   # Semantic search
-    ├── tagged.rs     # Tag search
-    └── fuzzy.rs      # Fuzzy search
+# Filters example
+cargo run --example verify_filters
+
+# Tagged TRT search
+cargo run --example tagged_trt
 ```
 
 ## Roadmap
 
-- [ ] Filter expressions (range queries, boolean logic)
-- [ ] Geospatial search
-- [ ] Image search with embeddings
-- [ ] Persistent index adapters (PostgreSQL, Redis)
-- [ ] Query DSL improvements
-- [ ] Performance benchmarks
-- [ ] More tokenization strategies
+- [x] **Multithreaded Operations**: Run all search operations in parallel.
+- [x] **Filter Expressions**: Range queries, boolean logic, and complex filtering.
+- [ ] **Async Operations**: Asynchronous entity search logic.
+- [ ] **Geospatial Search**: Location-based querying.
+- [ ] **Image Search**: Image-to-image and text-to-image search using embeddings.
+- [ ] **Persistent Storage**: Disk-backed index adapters (e.g., using `sled` or `rocksdb`).
+- [ ] **Distributed Search**: Sharding and clustering for massive datasets.
+- [ ] **Performance**: SIMD optimizations and advanced caching strategies.
 
 ## Contributing
 

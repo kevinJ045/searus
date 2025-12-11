@@ -8,7 +8,6 @@ use serde_json::Value;
 use std::collections::HashMap;
 #[cfg(not(feature = "parallel"))]
 use std::collections::HashSet;
-use std::fmt::Debug;
 
 #[cfg(feature = "parallel")]
 use dashmap::DashMap;
@@ -18,14 +17,14 @@ use rayon::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(feature = "parallel")]
-pub trait SemanticSearchable: serde::Serialize + Clone + Debug + Send + Sync {}
+pub trait SemanticSearchable: serde::Serialize + Clone + Send + Sync {}
 #[cfg(feature = "parallel")]
-impl<T: serde::Serialize + Clone + Debug + Send + Sync> SemanticSearchable for T {}
+impl<T: serde::Serialize + Clone + Send + Sync> SemanticSearchable for T {}
 
 #[cfg(not(feature = "parallel"))]
-pub trait SemanticSearchable: serde::Serialize + Clone + Debug {}
+pub trait SemanticSearchable: serde::Serialize + Clone {}
 #[cfg(not(feature = "parallel"))]
-impl<T: serde::Serialize + Clone + Debug> SemanticSearchable for T {}
+impl<T: serde::Serialize + Clone> SemanticSearchable for T {}
 
 /// Semantic text searcher using BM25 and tokenization.
 pub struct SemanticSearch {
@@ -206,11 +205,11 @@ where
         .par_iter()
         .enumerate()
         .filter(|(_, item)| {
-           if let Some(filters) = &query.filters {
-             filters.evaluate(item)
-           } else {
-             true
-           }
+          if let Some(filters) = &query.filters {
+            filters.evaluate(item)
+          } else {
+            true
+          }
         })
         .filter_map(|(index, item)| self.match_entity(item, index, query, &stats, &query_terms))
         .collect();
@@ -229,11 +228,11 @@ where
           .iter()
           .enumerate()
           .filter(|(_, item)| {
-             if let Some(filters) = &query.filters {
-               filters.evaluate(item)
-             } else {
-               true
-             }
+            if let Some(filters) = &query.filters {
+              filters.evaluate(item)
+            } else {
+              true
+            }
           })
           .filter_map(|(index, item)| self.match_entity(item, index, query, &stats, &query_terms)),
       );

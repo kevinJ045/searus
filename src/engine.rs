@@ -11,43 +11,122 @@ use rayon::prelude::*;
 
 /// The main search engine that coordinates multiple searchers.
 ///
-/// `SearusEngine` is the central component of the library. It manages a collection
-/// of `Searcher` plugins, dispatches search queries to them, and then merges
-/// the results into a single, ranked list.
+/// `SearusEngine` is the central component of the library, responsible for managing a
+/// collection of `Searcher` plugins. It orchestrates the entire search process, from
+/// dispatching queries to normalizing and merging results from different sources.
+///
+/// The engine is highly extensible, allowing for custom search logic via the `Searcher`
+/// trait and lifecycle hooks through the `SearusExtension` trait. This design enables
+/// complex, multi-modal search strategies that can be tailored to specific needs.
+///
+/// Create a `SearusEngine` using the [`SearusEngineBuilder`].
+///
+/// # Examples
+///
+/// ```rust
+/// use searus::prelude::*;
+/// use searus::searchers::SemanticSearch;
+///
+/// // 1. Define your data type
+/// #[derive(Debug, Clone, serde::Serialize)]
+/// struct Product {
+///     id: u32,
+///     name: String,
+///     description: String,
+/// }
+///
+/// // 2. Configure rules and searcher
+/// let rules = SemanticRules::builder()
+///     .field("name", FieldRule::bm25().priority(2))
+///     .build();
+/// let searcher = SemanticSearch::new(rules);
+///
+/// // 3. Build the engine
+/// let engine: SearusEngine<Product> = SearusEngine::builder()
+///     .with(Box::new(searcher))
+///     .normalization(NormalizationMethod::MinMax)
+///     .build();
+/// ```
 pub struct SearusEngine<T> {
   /// The collection of registered searcher plugins.
   searchers: Vec<Box<dyn Searcher<T>>>,
   /// The method used to normalize scores from different searchers.
   normalization: NormalizationMethod,
-  /// The collection of registered extensions.
+  /// The collection of registered extensions that hook into the search lifecycle.
   extensions: Vec<Box<dyn SearusExtension<T>>>,
 }
 
 impl<T: Searchable> SearusEngine<T> {
   /// Creates a new `SearusEngineBuilder` to construct an engine.
+  ///
+  /// # Returns
+  ///
+  /// A `SearusEngineBuilder` instance to configure a new engine.
   pub fn builder() -> SearusEngineBuilder<T> {
     SearusEngineBuilder::new()
   }
 
   /// Searches for items using all registered searchers and merges the results.
   ///
-  /// The search process involves the following steps:
-  /// 1. The query is dispatched to each registered `Searcher`.
-  /// 2. The raw scores from each searcher are normalized to a common scale
-  ///    (e.g., 0.0 to 1.0) using the configured `NormalizationMethod`.
-  /// 3. The normalized results are merged. If multiple searchers match the same
-  ///    item, their scores are combined using a weighted sum.
-  /// 4. The final, merged list is sorted by score in descending order.
-  /// 5. Pagination (`skip` and `limit`) is applied to the final list.
+  /// The search process follows a well-defined lifecycle, with hooks for `SearusExtension`
+  /// traits at various stages.
+  ///
+  /// ## Search Lifecycle
+  ///
+  /// 1.  **Query Initialization**: The initial `Query` is received.
+  /// 2.  **`before_query` Hook**: Extensions can modify the `Query` before it's sent to any searcher.
+  ///     For example, an extension could rewrite query text (e.g., "ml" -> "machine learning").
+  /// 3.  **`before_items` Hook**: Extensions can modify the collection of items to be searched.
+  ///     This allows for dynamically adding or removing items from the search context.
+  /// 4.  **Parallel Search Execution**: The query is dispatched to all registered `Searcher` instances.
+  ///     If the `parallel` feature is enabled, this happens concurrently.
+  /// 5.  **`after_searcher` Hook**: After each searcher returns its results, extensions can modify
+  ///     the list of matches (e.g., boosting scores, filtering).
+  /// 6.  **`before_merge` Hook**: Extensions can inspect or modify the collected results from all
+  ///     searchers before they are normalized and merged.
+  /// 7.  **Score Normalization**: Scores from each searcher are normalized to a common scale (e.g., 0.0 to 1.0)
+  ///     using the configured `NormalizationMethod`.
+  /// 8.  **Result Merging**: The normalized results are merged. If multiple searchers match the same
+  ///     item, their scores are combined using a weighted sum based on `SearchOptions`.
+  /// 9.  **`after_merge` Hook**: Extensions can modify the final, merged list of results before sorting.
+  /// 10. **Sorting**: The merged list is sorted by score in descending order.
+  /// 11. **`before_limit` Hook**: Extensions can access the sorted list before pagination is applied.
+  /// 12. **Pagination**: `skip` and `limit` from `SearchOptions` are applied.
+  /// 13. **`after_limit` Hook**: The final, paginated list of results can be modified by extensions.
+  /// 14. **Return**: The final `Vec<SearusMatch<T>>` is returned.
   ///
   /// # Arguments
   ///
-  /// * `items` - A slice of items to be searched.
-  /// * `query` - The search query containing the search parameters.
+  /// * `items` - A slice of items to be searched. These items must implement `Searchable`.
+  /// * `query` - The search query containing text, tags, filters, and other options.
   ///
   /// # Returns
   ///
-  /// A `Vec<SearusMatch<T>>` containing the final, ranked search results.
+  /// A `Vec<SearusMatch<T>>` containing the final, ranked, and paginated search results.
+  ///
+  /// # Examples
+  ///
+  /// ```rust
+  /// # use searus::prelude::*;
+  /// # use searus::searchers::SemanticSearch;
+  /// # #[derive(Debug, Clone, serde::Serialize)]
+  /// # struct Product { name: String }
+  /// # let rules = SemanticRules::builder().field("name", FieldRule::exact()).build();
+  /// # let searcher = SemanticSearch::new(rules);
+  /// # let engine = SearusEngine::builder().with(Box::new(searcher)).build();
+  /// # let products = vec![Product { name: "Phone".into() }];
+  ///
+  /// let query = Query::builder()
+  ///     .text("phone")
+  ///     .options(SearchOptions::default().limit(5))
+  ///     .build();
+  ///
+  /// let results = engine.search(&products, &query);
+  ///
+  /// for result in results {
+  ///     println!("Found item: {:?} with score {}", result.item, result.score);
+  /// }
+  /// ```
   pub fn search(&self, items: &[T], query: &Query) -> Vec<SearusMatch<T>>
   where
     T: Clone,
@@ -61,18 +140,9 @@ impl<T: Searchable> SearusEngine<T> {
     }
 
     // Prepare items, potentially modified by extensions
-    // We only clone if there are extensions that might modify items,
-    // otherwise we use the slice directly (optimization needed later, for now simple path)
-    // Actually, since before_items takes &mut Vec<T>, we must have a Vec.
-    // If we want to support adding items, we need a Vec.
     let mut items_vec = if !self.extensions.is_empty() {
       items.to_vec()
     } else {
-      // If no extensions, we might not need a vec, but the current logic below uses items slice.
-      // However, if we want to support before_items, we need to handle the case where items change.
-      // For simplicity and correctness with extensions, let's create the vec if extensions exist.
-      // But wait, if we create a vec, we need to pass that vec to searchers.
-      // Searchers take &[T].
       Vec::new()
     };
 
@@ -94,74 +164,25 @@ impl<T: Searchable> SearusEngine<T> {
     let context = SearchContext::new(items_slice);
 
     // Collect results from all searchers
-    // OPTIMIZATION: Run all searchers in parallel when parallel feature is enabled
     #[cfg(feature = "parallel")]
     let mut all_results: Vec<(SearcherKind, Vec<SearusMatch<T>>)> = self
       .searchers
-      .par_iter() // Note: par_iter might make it hard to run sequential hooks per searcher
+      .par_iter()
       .map(|searcher| {
-        // Note: before_searcher hook is tricky with parallel execution if it modifies searcher.
-        // Since searcher is &self here, we can't modify it.
-        // And before_searcher hook takes &mut Box<dyn Searcher>.
-        // So we can't easily support before_searcher in parallel mode without significant changes.
-        // For now, let's skip before_searcher in parallel mode or run it sequentially first?
-        // Running sequentially first doesn't help if we want to modify the searcher instance used in parallel.
-        // Given the constraints, we might skip before_searcher in parallel mode or accept it's read-only?
-        // But the trait signature is &self for extension.
-        // Wait, before_searcher takes &mut Box<dyn Searcher>.
-        // We can't mutate searchers in the engine while iterating.
-        // So before_searcher is effectively disabled for now in this implementation unless we clone searchers?
-        // Let's proceed without calling before_searcher in the parallel block for now,
-        // or maybe we can't support parallel execution with mutable searcher hooks easily.
-        // Let's just run searchers.
-        let results = searcher.search(&context, &query);
-
-        // Hook: after_searcher (we can run this on the results)
-        // But we need access to extensions. Extensions are Sync, so we can access them.
-        // But we need to iterate over them.
-        // Also, we can't easily call after_searcher in the parallel map closure because extensions might not be safe to call in parallel?
-        // Extensions are Send + Sync. So we can call them.
-        // But `after_searcher` takes `&mut Vec<SearusMatch>`. That's fine, we have ownership of results.
-        // So we can do it.
+        let mut results = searcher.search(&context, &query);
+        for ext in &self.extensions {
+          ext.after_searcher(&query, &mut results);
+        }
         (searcher.kind(), results)
       })
       .filter(|(_, results)| !results.is_empty())
       .collect();
-
-    // Apply after_searcher hooks in parallel results (need to do it after collect or inside map?)
-    // Inside map is better for parallelism.
-    // Let's refine the parallel block.
-
-    #[cfg(feature = "parallel")]
-    {
-      // We need to iterate over results and apply hooks.
-      // Since we already collected, let's iterate again or do it in the map.
-      // Doing it in map requires extensions to be available.
-      // self.extensions is available.
-      // But we skipped before_searcher.
-      // Let's just apply after_searcher here.
-      for (_, results) in &mut all_results {
-        for ext in &self.extensions {
-          ext.after_searcher(&query, results);
-        }
-      }
-    }
 
     #[cfg(not(feature = "parallel"))]
     let mut all_results: Vec<(SearcherKind, Vec<SearusMatch<T>>)> = self
       .searchers
       .iter()
       .map(|searcher| {
-        // We can't easily mutate searcher here either because it's behind a reference in the Vec.
-        // To support before_searcher modifying the searcher, we'd need RefCell or similar, or clone.
-        // For now, we'll skip before_searcher modification support or just pass a clone if searchers were cloneable (they aren't easily).
-        // Let's skip before_searcher for now as it requires architectural changes to Searcher storage.
-        // Or we can just pass the reference if we change the hook signature?
-        // The trait says `&mut Box<dyn Searcher>`.
-        // We can't do that with `iter()`.
-        // So we will skip `before_searcher` invocation for now to avoid breaking compilation,
-        // and note it as a limitation or future work.
-        // Actually, let's try to implement `after_searcher`.
         let mut results = searcher.search(&context, &query);
         for ext in &self.extensions {
           ext.after_searcher(&query, &mut results);
@@ -190,6 +211,13 @@ impl<T: Searchable> SearusEngine<T> {
     for ext in &self.extensions {
       ext.after_merge(&query, &mut merged);
     }
+
+    // Sort before applying limit
+    merged.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     // Hook: before_limit
     for ext in &self.extensions {
@@ -222,48 +250,11 @@ impl<T: Searchable> SearusEngine<T> {
   ) -> Vec<(SearcherKind, Vec<SearusMatch<T>>)> {
     // OPTIMIZATION: Normalize each searcher's results in parallel
     #[cfg(feature = "parallel")]
-    let normalized = results
-      .into_par_iter()
-      .map(|(kind, mut matches)| {
-        if matches.is_empty() {
-          return (kind, matches);
-        }
-
-        // Find min and max scores
-        let scores: Vec<f32> = matches.iter().map(|m| m.score).collect();
-        let min_score = scores.iter().copied().fold(f32::INFINITY, f32::min);
-        let max_score = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-
-        // Normalize based on method
-        match self.normalization {
-          NormalizationMethod::MinMax => {
-            let range = max_score - min_score;
-            if range > 0.0 {
-              for m in &mut matches {
-                m.score = (m.score - min_score) / range;
-              }
-            } else {
-              // All scores are the same, so we can set them all to 1.0
-              for m in &mut matches {
-                m.score = 1.0;
-              }
-            }
-          }
-          NormalizationMethod::InverseDistance => {
-            // Assumes scores are distances; converts them to similarities.
-            for m in &mut matches {
-              m.score = 1.0 / (1.0 + m.score);
-            }
-          }
-        }
-
-        (kind, matches)
-      })
-      .collect();
-
+    let iter = results.into_par_iter();
     #[cfg(not(feature = "parallel"))]
-    let normalized = results
-      .into_iter()
+    let iter = results.into_iter();
+
+    iter
       .map(|(kind, mut matches)| {
         if matches.is_empty() {
           return (kind, matches);
@@ -299,23 +290,12 @@ impl<T: Searchable> SearusEngine<T> {
 
         (kind, matches)
       })
-      .collect();
-
-    normalized
+      .collect()
   }
 
   /// Merges results from multiple searchers using a weighted scoring model.
   ///
   /// This method groups matches by item and combines their scores.
-  ///
-  /// # Warning on Merging Logic
-  ///
-  /// The current implementation uses a placeholder `hash_item` function to
-  /// identify unique items. This function is not robust and may not correctly
-  /// merge results for the same item if the item type `T` does not have a
-  /// stable identity (e.g., if it's cloned). For production use, it is
-  /// highly recommended that the items being searched have a proper, unique
-  /// identifier.
   fn merge_results(
     &self,
     results: Vec<(SearcherKind, Vec<SearusMatch<T>>)>,
@@ -330,11 +310,10 @@ impl<T: Searchable> SearusEngine<T> {
       let weight = query.options.weights.get(&kind).copied().unwrap_or(1.0);
 
       for m in matches {
-        // Use a placeholder hash to identify the item.
-        let item_hash = m.id;
+        let item_id = m.id;
 
-        let entry = merged.entry(item_hash).or_insert_with(|| SearusMatch {
-          id: 0 as usize,
+        let entry = merged.entry(item_id).or_insert_with(|| SearusMatch {
+          id: item_id,
           item: m.item.clone(),
           score: 0.0,
           field_scores: HashMap::new(),
@@ -354,22 +333,70 @@ impl<T: Searchable> SearusEngine<T> {
       }
     }
 
-    // Convert the map of merged items to a Vec and sort by score.
-    let mut results: Vec<SearusMatch<T>> = merged.into_values().collect();
-    results.sort_by(|a, b| {
-      b.score
-        .partial_cmp(&a.score)
-        .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    results
+    // Convert the map of merged items to a Vec. Sorting is done later.
+    merged.into_values().collect()
   }
 }
 
 /// A builder for creating `SearusEngine` instances.
 ///
-/// The builder pattern provides a convenient way to configure and construct
-/// a `SearusEngine` with the desired searchers and normalization method.
+/// The builder pattern provides a fluent and convenient way to configure and
+/// construct a `SearusEngine` with the desired searchers, extensions, and
+/// normalization method.
+///
+/// # Examples
+///
+/// ```
+/// use searus::prelude::*;
+/// use searus::searchers::{SemanticSearch, TaggedSearch};
+/// use serde::{Deserialize, Serialize};
+///
+/// #[derive(Debug, Clone, Serialize, Deserialize)]
+/// struct Post {
+///     title: String,
+///     content: String,
+///     tags: Vec<String>,
+/// }
+///
+/// // 1. Define semantic rules for text search.
+/// let semantic_rules = SemanticRules::builder()
+///     .field("title", FieldRule::bm25().priority(2))
+///     .field("content", FieldRule::tokenized().priority(1))
+///     .build();
+///
+/// // 2. Create searcher instances.
+/// let semantic_searcher = SemanticSearch::new(semantic_rules);
+/// let tag_searcher = TaggedSearch::new();
+///
+/// // 3. Build the engine with multiple searchers.
+/// let engine = SearusEngine::builder()
+///     .with(Box::new(semantic_searcher))
+///     .with(Box::new(tag_searcher))
+///     .normalization(NormalizationMethod::MinMax) // Optional: default is MinMax
+///     .build();
+///
+/// // 4. The engine is now ready to perform searches.
+/// let posts = vec![
+///     Post {
+///         title: "Rust Concurrency".to_string(),
+///         content: "A deep dive into fearless concurrency.".to_string(),
+///         tags: vec!["rust".to_string(), "tutorial".to_string()],
+///     }
+/// ];
+///
+/// let query = Query::builder()
+///     .text("rust")
+///     .tags(vec!["tutorial".to_string()])
+///     .options(
+///         SearchOptions::default()
+///             .weight(SearcherKind::Semantic, 0.7) // Give semantic search more weight
+///             .weight(SearcherKind::Tags, 0.3)     // Give tag search less weight
+///     )
+///     .build();
+///
+/// let results = engine.search(&posts, &query);
+/// assert!(!results.is_empty());
+/// ```
 #[derive(Default)]
 pub struct SearusEngineBuilder<T> {
   searchers: Vec<Box<dyn Searcher<T>>>,
@@ -389,10 +416,13 @@ impl<T> SearusEngineBuilder<T> {
 
   /// Adds a searcher plugin to the engine.
   ///
-  /// Searchers are added as boxed traits to allow for different underlying
-  /// implementations.
+  /// Searchers are the core components that perform the actual search logic.
+  /// They are added as boxed traits to allow for different underlying implementations.
+  ///
+  /// # Arguments
+  ///
+  /// * `searcher` - A `Box<dyn Searcher<T>>` instance.
   pub fn with(mut self, searcher: Box<dyn Searcher<T>>) -> Self {
-    // pub fn with(mut self, searcher: impl Searcher<T> + 'static) -> Self {
     self.searchers.push(searcher);
     self
   }
@@ -400,18 +430,33 @@ impl<T> SearusEngineBuilder<T> {
   /// Sets the score normalization method for the engine.
   ///
   /// If not set, `NormalizationMethod::MinMax` is used by default.
+  ///
+  /// # Arguments
+  ///
+  /// * `method` - The `NormalizationMethod` to use.
   pub fn normalization(mut self, method: NormalizationMethod) -> Self {
     self.normalization = Some(method);
     self
   }
 
   /// Adds an extension to the engine.
+  ///
+  /// Extensions provide a way to hook into the search lifecycle to modify
+  /// queries, items, or results.
+  ///
+  /// # Arguments
+  ///
+  /// * `extension` - A `Box<dyn SearusExtension<T>>` instance.
   pub fn with_extension(mut self, extension: Box<dyn SearusExtension<T>>) -> Self {
     self.extensions.push(extension);
     self
   }
 
   /// Builds the `SearusEngine` with the configured components.
+  ///
+  /// # Returns
+  ///
+  /// A new `SearusEngine<T>` instance.
   pub fn build(self) -> SearusEngine<T> {
     SearusEngine {
       searchers: self.searchers,
@@ -422,13 +467,38 @@ impl<T> SearusEngineBuilder<T> {
 }
 
 /// Defines the methods for normalizing scores from different searchers.
+///
+/// Normalization is crucial when combining results from multiple searchers,
+/// as each may produce scores on a different scale. By normalizing scores to a
+/// common range (like 0.0 to 1.0), they can be meaningfully compared and combined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NormalizationMethod {
-  /// Min-Max normalization, which scales scores to a [0, 1] range.
-  /// The formula is: `(score - min) / (max - min)`.
+  /// **Min-Max Normalization**: Scales scores to a `[0, 1]` range.
+  ///
+  /// This is the most common method. It preserves the relative ranking of items
+  /// within a searcher's result set.
+  ///
+  /// The formula is: `(score - min_score) / (max_score - min_score)`.
+  /// If all scores are the same, they are all normalized to `1.0`.
+  ///
+  /// # Example
+  ///
+  /// Use this when combining searchers that produce scores in arbitrary ranges,
+  /// like BM25 (unbounded positive) and Fuzzy (0.0 - 1.0).
   MinMax,
-  /// Inverse distance normalization, used when scores represent distances
-  /// (where lower is better). It converts distances to similarities.
-  /// The formula is: `1 / (1 + distance)`.
+
+  /// **Inverse Distance Normalization**: Converts distance scores to similarity scores.
+  ///
+  /// This method is useful when a searcher returns a "distance" where lower scores
+  /// are better (e.g., vector search distance). It transforms the distance into a
+  /// similarity score where higher is better.
+  ///
+  /// The formula is: `1.0 / (1.0 + distance)`.
+  /// This ensures that a distance of 0.0 becomes a similarity of 1.0, and larger
+  /// distances result in progressively smaller similarity scores.
+  ///
+  /// # Example
+  ///
+  /// Use this for vector searchers that return Euclidean distance or Cosine distance.
   InverseDistance,
 }

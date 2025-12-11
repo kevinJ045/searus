@@ -43,11 +43,51 @@ pub enum FilterExpr {
   Not(Box<FilterExpr>),
 }
 
+/// Helper to create a comparison filter.
+///
+/// # Examples
+///
+/// ```rust
+/// use searus::filter::{FilterExpr, CompareOp, FilterValue};
+///
+/// let filter = FilterExpr::Compare {
+///     field: "price".to_string(),
+///     op: CompareOp::Lt,
+///     value: FilterValue::Number(50.0),
+/// };
+/// ```
+
 impl FilterExpr {
   /// Evaluates the filter expression against a given item.
   ///
   /// The item must implement `serde::Serialize` so that its fields can be
   /// accessed dynamically.
+  ///
+  /// # Examples
+  ///
+  /// ```rust
+  /// use searus::filter::{FilterExpr, CompareOp, FilterValue};
+  /// use serde::Serialize;
+  ///
+  /// #[derive(Serialize)]
+  /// struct Book {
+  ///     title: String,
+  ///     price: f64,
+  /// }
+  ///
+  /// let book = Book {
+  ///     title: "The Rust Programming Language".into(),
+  ///     price: 40.0,
+  /// };
+  ///
+  /// let filter = FilterExpr::Compare {
+  ///     field: "price".to_string(),
+  ///     op: CompareOp::Lt,
+  ///     value: FilterValue::Number(50.0),
+  /// };
+  ///
+  /// assert!(filter.evaluate(&book));
+  /// ```
   pub fn evaluate<T: serde::Serialize>(&self, item: &T) -> bool {
     let json_value = match serde_json::to_value(item) {
       Ok(v) => v,

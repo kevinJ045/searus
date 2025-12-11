@@ -120,6 +120,19 @@ impl TagRelationshipTree {
 /// them against the tags provided in the search query.
 ///
 /// Optionally supports Tag Relationship Tree (TRT) for hierarchical tag expansion.
+///
+/// # Examples
+///
+/// ```rust
+/// use searus::prelude::*;
+/// use searus::searchers::TaggedSearch;
+///
+/// // Default uses "tags" field
+/// let searcher = TaggedSearch::new();
+///
+/// // Or specify a custom field
+/// let custom_searcher = TaggedSearch::with_field("categories");
+/// ```
 pub struct TaggedSearch {
   /// The name of the field that contains the tags in the item.
   tag_field: String,
@@ -153,6 +166,25 @@ impl TaggedSearch {
   /// # Arguments
   ///
   /// * `trt` - The Tag Relationship Tree to use for query expansion
+  ///
+  /// # Examples
+  ///
+  /// ```rust
+  /// use searus::prelude::*;
+  /// use searus::searchers::TaggedSearch;
+  /// use searus::searchers::tagged::{TagRelationshipTree, TagNode};
+  /// use std::collections::HashMap;
+  ///
+  /// let nodes = vec![
+  ///     TagNode {
+  ///         tag: "rust".to_string(),
+  ///         relationships: HashMap::from([("programming".to_string(), 0.8)]),
+  ///     }
+  /// ];
+  /// let trt = TagRelationshipTree::new(nodes);
+  ///
+  /// let searcher = TaggedSearch::new().with_trt(trt);
+  /// ```
   pub fn with_trt(mut self, trt: TagRelationshipTree) -> Self {
     self.trt = Some(trt);
     self

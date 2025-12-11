@@ -12,6 +12,33 @@ use crate::types::{Query, Searchable, SearcherKind, SearusMatch};
 ///
 /// The `Send` and `Sync` bounds are required to allow searchers to be used
 /// concurrently by the engine.
+///
+/// # Examples
+///
+/// Implementing a simple exact match searcher:
+///
+/// ```rust
+/// use searus::prelude::*;
+///
+/// struct ExactSearcher;
+///
+/// impl<T: Searchable + Clone> Searcher<T> for ExactSearcher {
+///     fn kind(&self) -> SearcherKind {
+///         SearcherKind::Custom
+///     }
+///
+///     fn search(&self, context: &SearchContext<T>, query: &Query) -> Vec<SearusMatch<T>> {
+///         let mut results = Vec::new();
+///         if let Some(query_text) = &query.text {
+///             for (i, item) in context.items.iter().enumerate() {
+///                 // Simplified matching logic
+///                 results.push(SearusMatch::new(item.clone(), 1.0, i));
+///             }
+///         }
+///         results
+///     }
+/// }
+/// ```
 pub trait Searcher<T: Searchable>: Send + Sync {
   /// Returns the `SearcherKind` of this searcher.
   ///

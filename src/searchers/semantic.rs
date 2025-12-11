@@ -27,6 +27,19 @@ pub trait SemanticSearchable: serde::Serialize + Clone {}
 impl<T: serde::Serialize + Clone> SemanticSearchable for T {}
 
 /// Semantic text searcher using BM25 and tokenization.
+///
+/// # Examples
+///
+/// ```rust
+/// use searus::prelude::*;
+/// use searus::searchers::SemanticSearch;
+///
+/// let rules = SemanticRules::builder()
+///     .field("title", FieldRule::bm25())
+///     .build();
+///
+/// let searcher = SemanticSearch::new(rules);
+/// ```
 pub struct SemanticSearch {
   rules: SemanticRules,
   bm25: BM25Scorer,
@@ -34,6 +47,10 @@ pub struct SemanticSearch {
 
 impl SemanticSearch {
   /// Create a new semantic searcher with the given rules.
+  ///
+  /// # Arguments
+  ///
+  /// * `rules` - The `SemanticRules` configuration.
   pub fn new(rules: SemanticRules) -> Self {
     Self {
       rules,

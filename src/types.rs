@@ -183,17 +183,18 @@ pub struct Query {
 }
 
 impl Query {
-  pub const AND: i32 = 1;
-  pub const OR: i32 = 2;
-  pub const NOT: i32 = 3;
-  pub const COMPARE: i32 = 0;
+  pub const AND: u8 = 1;
+  pub const OR: u8 = 2;
+  pub const NOT: u8 = 3;
+  pub const COMPARE: u8 = 0;
 
   /// Creates a new `QueryBuilder` to construct a `Query` in a chained manner.
   pub fn builder() -> QueryBuilder {
     QueryBuilder::default()
   }
 
-  pub fn filter(filter_type: i32) -> FilterBuilder {
+  /// Creates a new `FilterBuild` to construct a `FilterExpr` in a chained manner.
+  pub fn filter(filter_type: u8) -> FilterBuilder {
     match filter_type {
       1 => FilterBuilder {
         filter: FilterExpr::And(Vec::new()),

@@ -25,6 +25,16 @@ impl<T: serde::Serialize + Clone> FuzzySearchable for T {}
 /// with typos or variations in spelling. It works by tokenizing the query and
 /// the text in the specified fields, and then comparing the tokens to find
 /// terms with a high degree of similarity.
+///
+/// # Examples
+///
+/// ```rust
+/// use searus::prelude::*;
+/// use searus::searchers::FuzzySearch;
+///
+/// // Search in "title" and "content" fields
+/// let searcher = FuzzySearch::new(vec!["title".to_string(), "content".to_string()]);
+/// ```
 pub struct FuzzySearch {
   /// The minimum similarity threshold required to consider a term a match.
   /// This value should be between 0.0 (no similarity) and 1.0 (exact match).

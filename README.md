@@ -59,7 +59,7 @@ fn main() {
     let searcher = SemanticSearch::new(rules);
 
     // Build the search engine
-    let engine = SearusEngine::builder()
+    let engine: SearusEngine<Post> = SearusEngine::builder()
         .with(Box::new(searcher))
         .build();
 
@@ -130,6 +130,38 @@ let query = Query::builder()
     .build();
 ```
 
+### Tag Relationship Trees (TRT)
+
+Enhance tag-based search by defining relationships between tags. This allows queries for a parent tag (e.g., "programming") to automatically include results for child tags (e.g., "rust", "python").
+
+```rust
+use searus::searchers::tagged::{TagNode, TagRelationshipTree};
+use std::collections::HashMap;
+
+// Define tag relationships
+let nodes = vec![
+    TagNode {
+        tag: "rust".to_string(),
+        relationships: HashMap::from([("programming".to_string(), 0.8)]),
+    },
+    TagNode {
+        tag: "python".to_string(),
+        relationships: HashMap::from([("programming".to_string(), 0.7)]),
+    },
+];
+
+let trt = TagRelationshipTree::new(nodes);
+
+// Configure searcher with TRT
+let tag_searcher = TaggedSearch::new().with_trt(trt);
+
+// Query with TRT expansion (depth 1)
+let query = Query::builder()
+    .tags(vec!["programming".to_string()])
+    .with_trt(1) 
+    .build();
+```
+
 ### Fuzzy Search
 
 String similarity matching using Jaro-Winkler distance:
@@ -190,7 +222,7 @@ index.put(
     post,
     Some(embedding_vector), // Optional vector for KNN search
     Some(vec!["rust".to_string()]), // Optional tags
-)?;
+).unwrap();
 
 // Find nearest neighbors
 let neighbors = index.knn(&query_vector, 10);
@@ -228,6 +260,21 @@ let query = Query::builder()
             .timeout_ms(5000)                       // Search timeout
             .weight(SearcherKind::Semantic, 0.7)    // Searcher weights
             .weight(SearcherKind::Tags, 0.3)
+    )
+    .filters(
+        // [views>=1000] OR [author=Bob]
+        Query::filter(Query::OR)
+            .with(
+              Query::filter(Query::COMPARE)
+                  .ge("views", 1000)
+                  .build()
+            )
+            .with(
+              Query::filter(Query::COMPARE)
+                  .eq("author", "Bob")
+                  .build()
+            )
+            .build()
     )
     .build();
 ```

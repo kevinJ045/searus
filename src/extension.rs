@@ -8,11 +8,48 @@ use crate::types::{Query, Searchable, SearusMatch};
 /// Extensions allow for modifying queries, items, and results at various stages
 /// of the search process. They can be used for caching, query rewriting,
 /// data fetching, filtering, and more.
+///
+/// # Examples
+///
+/// Implementing a simple logging extension:
+///
+/// ```rust
+/// use searus::prelude::*;
+///
+/// struct LoggingExtension;
+///
+/// impl<T: Searchable> SearusExtension<T> for LoggingExtension {
+///     fn before_query(&self, query: &mut Query) {
+///         if let Some(text) = &query.text {
+///             println!("Processing query: {}", text);
+///         }
+///     }
+///
+///     fn after_limit(&self, _query: &Query, results: &mut Vec<SearusMatch<T>>) {
+///         println!("Returning {} results", results.len());
+///     }
+/// }
+/// ```
 pub trait SearusExtension<T: Searchable>: Send + Sync {
   /// Called before the query is processed.
   ///
   /// This hook allows modifying the query before it is used for search.
   /// For example, a query rewriter extension could expand terms or add filters.
+  ///
+  /// # Examples
+  ///
+  /// ```rust
+  /// # use searus::prelude::*;
+  /// # struct MyExt;
+  /// # impl<T: Searchable> SearusExtension<T> for MyExt {
+  /// fn before_query(&self, query: &mut Query) {
+  ///     // Force all queries to be lowercase
+  ///     if let Some(text) = &mut query.text {
+  ///         *text = text.to_lowercase();
+  ///     }
+  /// }
+  /// # }
+  /// ```
   fn before_query(&self, _query: &mut Query) {}
 
   /// Called before the items are passed to the searchers.
@@ -30,7 +67,6 @@ pub trait SearusExtension<T: Searchable>: Send + Sync {
   /// which it currently doesn't (it's `&self` in `search`).
   /// So this hook is mostly for side effects or logging in the current design,
   /// unless we change `Searcher` to be mutable or `Box<dyn Searcher>` to be mutable here.
-  /// The `EXT.md` proposed `searcher: &mut Box<dyn Searcher<T>>`.
   fn before_searcher(&self, _query: &Query, _searcher: &mut Box<dyn Searcher<T>>) {}
 
   /// Called after a specific searcher has executed.
@@ -43,29 +79,6 @@ pub trait SearusExtension<T: Searchable>: Send + Sync {
   /// This hook allows modifying the collection of all results before they are combined.
   /// The results are passed as a mutable vector of matches, which is what `merge_results` expects
   /// if we change the engine to flatten them first, or we can pass the structure `Vec<(SearcherKind, Vec<SearusMatch<T>>)>`.
-  /// `EXT.md` signature: `fn before_merge<T>(&self, query: &Query, results: &mut Vec<SearusMatch<T>>)`.
-  /// This implies `before_merge` happens *after* flattening but *before* the logic that combines scores?
-  /// Or maybe it means "before the final merge step".
-  /// Let's look at `engine.rs`. `merge_results` takes `Vec<(SearcherKind, Vec<SearusMatch<T>>)>`.
-  /// If `before_merge` takes `Vec<SearusMatch<T>>`, it implies the results are already flattened?
-  /// Actually, `EXT.md` says "Useful for weighting searchers...". Weighting usually happens during merge.
-  /// If we want to support weighting adjustments, we probably want access to the unmerged results.
-  /// However, to stick to the `EXT.md` signature which uses `Vec<SearusMatch<T>>`, let's assume
-  /// it runs *after* merge but *before* sorting/pagination?
-  /// Wait, `EXT.md` lists:
-  /// 5. before_merge
-  /// 6. after_merge
-  /// 7. before_limit
-  ///
-  /// If `before_merge` takes `Vec<SearusMatch<T>>`, then the merge must have already happened?
-  /// That would make `before_merge` and `after_merge` redundant if they both take `Vec<SearusMatch<T>>`.
-  /// Let's re-read `EXT.md`: "Useful for weighting searchers, boosting certain types, etc."
-  /// This suggests `before_merge` should probably take the *unmerged* results: `&mut Vec<(SearcherKind, Vec<SearusMatch<T>>)>`.
-  /// But the trait definition in `EXT.md` showed `results: &mut Vec<SearusMatch<T>>`.
-  /// This might be a typo or simplification in `EXT.md`.
-  /// Given the description, I will implement `before_merge` to take `&mut Vec<(SearcherKind, Vec<SearusMatch<T>>)>`
-  /// to allow for weighting/boosting logic that depends on the searcher kind.
-  /// And `after_merge` will take `&mut Vec<SearusMatch<T>>`.
   fn before_merge(
     &self,
     _query: &Query,

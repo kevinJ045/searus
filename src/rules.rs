@@ -22,6 +22,17 @@ pub struct SemanticRules {
 
 impl SemanticRules {
   /// Creates a new `SemanticRulesBuilder` to construct the rules fluently.
+  ///
+  /// # Examples
+  ///
+  /// ```rust
+  /// use searus::rules::{SemanticRules, FieldRule};
+  ///
+  /// let rules = SemanticRules::builder()
+  ///     .field("title", FieldRule::bm25().priority(2))
+  ///     .field("content", FieldRule::tokenized())
+  ///     .build();
+  /// ```
   pub fn builder() -> SemanticRulesBuilder {
     SemanticRulesBuilder::default()
   }
@@ -94,6 +105,14 @@ impl Default for FieldRule {
 
 impl FieldRule {
   /// Creates a new `FieldRule` with a specified matcher and default priority and boost.
+  ///
+  /// # Examples
+  ///
+  /// ```rust
+  /// use searus::rules::{FieldRule, Matcher};
+  ///
+  /// let rule = FieldRule::new(Matcher::BM25);
+  /// ```
   pub fn new(matcher: Matcher) -> Self {
     Self {
       matcher,
@@ -107,6 +126,14 @@ impl FieldRule {
   }
 
   /// Creates a `FieldRule` for relevance scoring using the BM25 algorithm.
+  ///
+  /// # Examples
+  ///
+  /// ```rust
+  /// use searus::rules::FieldRule;
+  ///
+  /// let rule = FieldRule::bm25().priority(2).boost(1.5);
+  /// ```
   pub fn bm25() -> Self {
     Self::new(Matcher::BM25)
   }
